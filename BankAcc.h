@@ -24,7 +24,7 @@ public:
     BankAcc();
     BankAcc(double bal);
     void setAccountID(string ID);
-    bool setBalance(double bal);
+    virtual bool setBalance(double bal);
     void setType(string t);
     void setClient(Client &c);
     string getAccountID();

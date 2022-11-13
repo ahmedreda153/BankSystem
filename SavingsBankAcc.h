@@ -18,7 +18,7 @@ public:
     SavingsBankAcc();
     double setMinimumBalance(double min);
     double getMinimumBalance();
-    void setBalance(double bal);
+    bool setBalance(double bal);
     bool withdraw(double amount);
     bool deposit(double amount);
 };

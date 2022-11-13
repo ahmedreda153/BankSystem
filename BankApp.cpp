@@ -107,11 +107,16 @@ double SavingsBankAcc::getMinimumBalance()
     return minimumBalance;
 }
 
-void SavingsBankAcc::setBalance(double bal)
+bool SavingsBankAcc::setBalance(double bal)
 {
     if (bal >= minimumBalance)
     {
         balance = bal;
+        return true;
+    }
+    else
+    {
+        return false;
     }
 }
 
@@ -206,12 +211,12 @@ bool BankApp::addClient()
     c->setName(name);
 
     cout << "Enter client address: ";
-    cin.ignore();
+    // cin.ignore();
     getline(cin, address);
     c->setAddress(address);
 
     cout << "Enter client phone: ";
-    cin.ignore();
+    // cin.ignore();
     getline(cin, phone);
     c->setPhone(phone);
 
@@ -239,14 +244,13 @@ bool BankApp::addClient()
         s->setAccountID(accountID);
         cout << "Please Enter the Starting Balance : ";
         cin >> balance;
-        while (balance < 1000)
+        while (s->setBalance(balance) == false)
         {
             cout << "Your starting balance must be greater than the minimum balance" << endl;
             cout << "The minimum balance is " << s->getMinimumBalance() << endl;
             cout << "Please Enter the Starting Balance : ";
             cin >> balance;
         }
-        s->setBalance(balance);
         c->setBankAccount(*s);
         vecAccounts.push_back(s);
         vecClients.push_back(c);
