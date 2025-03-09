@@ -108,7 +108,7 @@ TEST_F(SavingsBankAccTest, Deposit) {
 }
 
 // Test listClients() output
-TEST_F(BankAppTest, ListClientsOutputsCorrectly) {
+TEST_F(BankAccTest, ListClientsOutputsCorrectly) {
     std::stringstream buffer;
     std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
 
@@ -122,7 +122,7 @@ TEST_F(BankAppTest, ListClientsOutputsCorrectly) {
 }
 
 // Test withdraw() output
-TEST_F(BankAppTest, WithdrawOutputsCorrectly) {
+TEST_F(BankAccTest, WithdrawOutputsCorrectly) {
     std::stringstream buffer;
     std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
 
@@ -135,19 +135,6 @@ TEST_F(BankAppTest, WithdrawOutputsCorrectly) {
     EXPECT_EQ(buffer.str(), "Withdraw done\n");
 }
 
-// Test withdraw() output
-TEST_F(BankAppTest, WithdrawOutputsCorrectlyNew) {
-    std::stringstream buffer;
-    std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
-
-    // Call method
-    bankApp.withdraw();
-
-    std::cout.rdbuf(prevcout); // Restore std::cout
-
-    // Verify output
-    EXPECT_EQ(buffer.str(), "Withdraw done\n");
-}
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
