@@ -107,6 +107,34 @@ TEST_F(SavingsBankAccTest, Deposit) {
     EXPECT_EQ(account.getBalance(), 150.0);
 }
 
+// Test listClients() output
+TEST_F(BankAppTest, ListClientsOutputsCorrectly) {
+    std::stringstream buffer;
+    std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
+
+    // Call method
+    bankApp.listClients();
+
+    std::cout.rdbuf(prevcout); // Restore std::cout
+
+    // Verify output
+    EXPECT_EQ(buffer.str(), "List of Clients and Accounts\n");
+}
+
+// Test withdraw() output
+TEST_F(BankAppTest, WithdrawOutputsCorrectly) {
+    std::stringstream buffer;
+    std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
+
+    // Call method
+    bankApp.withdraw();
+
+    std::cout.rdbuf(prevcout); // Restore std::cout
+
+    // Verify output
+    EXPECT_EQ(buffer.str(), "Withdraw done\n");
+}
+
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
