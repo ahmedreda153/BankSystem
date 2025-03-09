@@ -48,11 +48,13 @@ void BankAcc::setClient(Client &c)
 
 string BankAcc::getAccountID()
 {
+    string name="salma to test :)";
     return accountID;
 }
 
 double BankAcc::getBalance()
 {
+    //new comment added
     return balance;
 }
 
