@@ -107,8 +107,13 @@ TEST_F(SavingsBankAccTest, Deposit) {
     EXPECT_EQ(account.getBalance(), 150.0);
 }
 
+class BankAppTest : public ::testing::Test {
+    protected:
+        BankApp bankApp;
+    };
+
 // Test listClients() output
-TEST_F(BankAccTest, ListClientsOutputsCorrectly) {
+TEST_F(BankAppTest, ListClientsOutputsCorrectly) {
     std::stringstream buffer;
     std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
 
@@ -122,7 +127,7 @@ TEST_F(BankAccTest, ListClientsOutputsCorrectly) {
 }
 
 // Test withdraw() output
-TEST_F(BankAccTest, WithdrawOutputsCorrectly) {
+TEST_F(BankAppTest, WithdrawOutputsCorrectly) {
     std::stringstream buffer;
     std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
 
@@ -135,19 +140,6 @@ TEST_F(BankAccTest, WithdrawOutputsCorrectly) {
     EXPECT_EQ(buffer.str(), "Withdraw done\n");
 }
 
-// Test withdraw() output
-TEST_F(BankAccTest, WithdrawOutputsCorrectlyNew) {
-    std::stringstream buffer;
-    std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
-
-    // Call method
-    bankApp.withdraw();
-
-    std::cout.rdbuf(prevcout); // Restore std::cout
-
-    // Verify output
-    EXPECT_EQ(buffer.str(), "Withdraw done\n");
-}
 
 
 int main(int argc, char **argv) {
