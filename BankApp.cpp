@@ -48,11 +48,13 @@ void BankAcc::setClient(Client &c)
 
 string BankAcc::getAccountID()
 {
+    string name="salma to test, second time :)";
     return accountID;
 }
 
 double BankAcc::getBalance()
 {
+    //new comment added
     return balance;
 }
 
@@ -267,74 +269,85 @@ bool BankApp::addClient()
 
 void BankApp::listClients()
 {
+    // cout << endl
+    //      << "List of Clients and Accounts" << endl;
+    // for (int i = 0; i < vecClients.size(); i++)
+    // {
+    //     cout << endl
+    //          << "Client No. " << i + 1 << endl;
+    //     cout << "       Client Name: " << vecClients[i]->getName() << endl;
+    //     cout << "       Client Address: " << vecClients[i]->getAddress() << endl;
+    //     cout << "       Client Phone: " << vecClients[i]->getPhone() << endl;
+    //     cout << "       Account ID: " << vecClients[i]->getBankAccount()->getAccountID() << endl;
+    //     cout << "       Account Type: " << vecClients[i]->getBankAccount()->getType() << endl;
+    //     cout << "       Account Balance: " << vecClients[i]->getBankAccount()->getBalance() << endl;
+    // }
+    //dummy code   
+    vecAccounts[0]->getAccountID(); 
     cout << endl
          << "List of Clients and Accounts" << endl;
-    for (int i = 0; i < vecClients.size(); i++)
-    {
-        cout << endl
-             << "Client No. " << i + 1 << endl;
-        cout << "       Client Name: " << vecClients[i]->getName() << endl;
-        cout << "       Client Address: " << vecClients[i]->getAddress() << endl;
-        cout << "       Client Phone: " << vecClients[i]->getPhone() << endl;
-        cout << "       Account ID: " << vecClients[i]->getBankAccount()->getAccountID() << endl;
-        cout << "       Account Type: " << vecClients[i]->getBankAccount()->getType() << endl;
-        cout << "       Account Balance: " << vecClients[i]->getBankAccount()->getBalance() << endl;
-    }
 }
 
 void BankApp::withdraw()
 {
-    string accID;
-    double amount;
-    cout << "Enter Account ID: ";
-    cin >> accID;
-    for (int i = 0; i < vecAccounts.size(); i++)
-    {
-        if (vecAccounts[i]->getAccountID() == accID)
-        {
-            cout << endl
-                 << "Account ID: " << vecAccounts[i]->getAccountID() << endl;
-            cout << "Account Type: " << vecAccounts[i]->getType() << endl;
-            cout << "Account Balance: " << vecAccounts[i]->getBalance() << endl;
-            cout << "Enter Amount to Withdraw: ";
-            cin >> amount;
-            while (vecAccounts[i]->withdraw(amount) == false)
-            {
-                cout << "Sorry. This is more than you can withdraw" << endl;
-                cout << "Account Balance: " << vecAccounts[i]->getBalance() << endl;
-                cout << "Please enter a valid amount: ";
-                cin >> amount;
-            }
-            cout << "Thank you. Your new balance is " << vecAccounts[i]->getBalance() << endl;
-        }
-    }
+    // string accID;
+    // double amount;
+    // cout << "Enter Account ID: ";
+    // cin >> accID;
+    // for (int i = 0; i < vecAccounts.size(); i++)
+    // {
+    //     if (vecAccounts[i]->getAccountID() == accID)
+    //     {
+    //         cout << endl
+    //              << "Account ID: " << vecAccounts[i]->getAccountID() << endl;
+    //         cout << "Account Type: " << vecAccounts[i]->getType() << endl;
+    //         cout << "Account Balance: " << vecAccounts[i]->getBalance() << endl;
+    //         cout << "Enter Amount to Withdraw: ";
+    //         cin >> amount;
+    //         while (vecAccounts[i]->withdraw(amount) == false)
+    //         {
+    //             cout << "Sorry. This is more than you can withdraw" << endl;
+    //             cout << "Account Balance: " << vecAccounts[i]->getBalance() << endl;
+    //             cout << "Please enter a valid amount: ";
+    //             cin >> amount;
+    //         }
+    //         cout << "Thank you. Your new balance is " << vecAccounts[i]->getBalance() << endl;
+    //     }
+    // }
+    vecAccounts[0]->getAccountID();
+
+    cout << endl
+    << "Withdraw done" << endl;
 }
 
 void BankApp::deposit()
 {
-    string accID;
-    double amount;
-    cout << "Enter Account ID: ";
-    cin >> accID;
-    for (int i = 0; i < vecAccounts.size(); i++)
-    {
-        if (vecAccounts[i]->getAccountID() == accID)
-        {
-            cout << endl
-                 << "Account ID: " << vecAccounts[i]->getAccountID() << endl;
-            cout << "Account Type: " << vecAccounts[i]->getType() << endl;
-            cout << "Account Balance: " << vecAccounts[i]->getBalance() << endl;
-            cout << "Enter Amount to Deposit: ";
-            cin >> amount;
-            while (vecAccounts[i]->deposit(amount) == false)
-            {
-                cout << "Sorry. This is less than what you can deposit" << endl;
-                cout << "Minimum Deposit Amount is 100, Please enter a valid amount : ";
-                cin >> amount;
-            }
-            cout << "Thank you. Your new balance is " << vecAccounts[i]->getBalance() << endl;
-        }
-    }
+    // string accID;
+    // double amount;
+    // cout << "Enter Account ID: ";
+    // cin >> accID;
+    // for (int i = 0; i < vecAccounts.size(); i++)
+    // {
+    //     if (vecAccounts[i]->getAccountID() == accID)
+    //     {
+    //         cout << endl
+    //              << "Account ID: " << vecAccounts[i]->getAccountID() << endl;
+    //         cout << "Account Type: " << vecAccounts[i]->getType() << endl;
+    //         cout << "Account Balance: " << vecAccounts[i]->getBalance() << endl;
+    //         cout << "Enter Amount to Deposit: ";
+    //         cin >> amount;
+    //         while (vecAccounts[i]->deposit(amount) == false)
+    //         {
+    //             cout << "Sorry. This is less than what you can deposit" << endl;
+    //             cout << "Minimum Deposit Amount is 100, Please enter a valid amount : ";
+    //             cin >> amount;
+    //         }
+    //         cout << "Thank you. Your new balance is " << vecAccounts[i]->getBalance() << endl;
+    //     }
+    // }
+    vecAccounts[0]->getAccountID();
+    cout << endl
+    << "Deposit done" << endl;
 }
 
 void BankApp::run()
