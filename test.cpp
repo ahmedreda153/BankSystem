@@ -11,6 +11,7 @@ protected:
 };
 
 
+
 // Test default constructor
 TEST_F(BankAccTest, DefaultConstructor) {
     EXPECT_EQ(account.getBalance(), 0);
@@ -155,7 +156,32 @@ TEST_F(BankAppTest, WithdrawOutputsCorrectlyNew) {
     EXPECT_EQ(buffer.str(), "Withdraw done\n");
 }
 
+TEST_F(BankAppTest, DummyBankAppOutputsCorrectly) {
+    std::stringstream buffer;
+    std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
 
+    // Call method
+    bankApp.dummyBankApp();
+
+    std::cout.rdbuf(prevcout); // Restore std::cout
+
+    // Verify output
+    EXPECT_EQ(buffer.str(), "List of Clients and Accounts\n");
+}
+
+// Test deposit() output
+TEST_F(BankAppTest, DepositOutputsCorrectly) {
+    std::stringstream buffer;
+    std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
+
+    // Call method
+    bankApp.deposit();
+
+    std::cout.rdbuf(prevcout); // Restore std::cout
+
+    // Verify output
+    EXPECT_EQ(buffer.str(), "Deposit done\n");
+}
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
