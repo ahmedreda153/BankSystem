@@ -10,6 +10,7 @@ protected:
     BankAcc account;
 };
 
+
 // Test default constructor
 TEST_F(BankAccTest, DefaultConstructor) {
     EXPECT_EQ(account.getBalance(), 0);
