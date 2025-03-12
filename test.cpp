@@ -10,8 +10,6 @@ protected:
     BankAcc account;
 };
 
-
-
 // Test default constructor
 TEST_F(BankAccTest, DefaultConstructor) {
     EXPECT_EQ(account.getBalance(), 0);
@@ -19,8 +17,8 @@ TEST_F(BankAccTest, DefaultConstructor) {
 
 // Test parameterized constructor
 TEST_F(BankAccTest, ParameterizedConstructor) {
-    BankAcc account(100.0);
-    EXPECT_EQ(account.getBalance(), 100.0);
+    BankAcc account(10.0);
+    EXPECT_EQ(account.getBalance(), 10.0);
 }
 
 // Test setAccountID and getAccountID
@@ -66,6 +64,11 @@ TEST_F(BankAccTest, Deposit) {
     EXPECT_FALSE(account.deposit(-50.0));
     EXPECT_EQ(account.getBalance(), 100.0);
 }
+
+// // Test dummy method
+// TEST_F(BankAccTest, Dummy) {
+//     account.dummy();//dummy function
+// }
 
 // Test fixture for SavingsBankAcc class
 class SavingsBankAccTest : public ::testing::Test {
@@ -156,6 +159,7 @@ TEST_F(BankAppTest, WithdrawOutputsCorrectlyNew) {
     EXPECT_EQ(buffer.str(), "Withdraw done\n");
 }
 
+//Test dummyBankApp() output
 TEST_F(BankAppTest, DummyBankAppOutputsCorrectly) {
     std::stringstream buffer;
     std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
@@ -182,6 +186,7 @@ TEST_F(BankAppTest, DepositOutputsCorrectly) {
     // Verify output
     EXPECT_EQ(buffer.str(), "Deposit done\n");
 }
+
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
