@@ -14,8 +14,10 @@ jobs:
             
         - name: Send Diff to Backend
           run: |
-            curl -X POST "https://28d9-197-133-69-11.ngrok-free.app/codebase/analyze?repo_name=${{ github.repository }}" \
-                -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc0MjA1MDI3MiwianRpIjoiMDRjZTc1MDgtNmUwNC00ODY0LWIxNzAtMjE5YmNiYzQ4MzQ3IiwidHlwZSI6ImFjY2VzcyIsInN1YiI6MywibmJmIjoxNzQyMDUwMjcyLCJjc3JmIjoiNWYyN2Y3ZWYtZDVkOC00NGRmLTlmZmQtN2I0NTY3OTY4ZGVlIiwiZXhwIjoxNzQyMDUxMTcyfQ.je3VLeMH5LlCiDvZ6G-Ti6nwZdRlkw1NNbvoqeBy0fQ" \
-                -H "Content-Type: application/json" \
-                -d '{
-                }'
+            set -e  # Exit immediately if a command exits with a non-zero status
+            curl -X GET "https://28d9-197-133-69-11.ngrok-free.app/codebase/analyze?repo_name=${{ github.repository }}" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc0MjA1MDI3MiwianRpIjoiMDRjZTc1MDgtNmUwNC00ODY0LWIxNzAtMjE5YmNiYzQ4MzQ3IiwidHlwZSI6ImFjY2VzcyIsInN1YiI6MywibmJmIjoxNzQyMDUwMjcyLCJjc3JmIjoiNWYyN2Y3ZWYtZDVkOC00NGRmLTlmZmQtN2I0NTY3OTY4ZGVlIiwiZXhwIjoxNzQyMDUxMTcyfQ.je3VLeMH5LlCiDvZ6G-Ti6nwZdRlkw1NNbvoqeBy0fQ" \
+            -H "Content-Type: application/json" \
+            -d '{
+            }'
+          continue-on-error: false
