@@ -1,4 +1,4 @@
-name: Run Selected GTest Cases
+name: Analyze Codebase
 
 on:
   pull_request:
@@ -6,18 +6,28 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest  # Use Linux as the environment
+    runs-on: ubuntu-latest  
 
     steps:
         - name: Checkout code
           uses: actions/checkout@v4
+          with:
+            fetch-depth: 0 
             
         - name: Send Diff to Backend
           run: |
-            set -e  # Exit immediately if a command exits with a non-zero status
-            curl -X GET "https://28d9-197-133-69-11.ngrok-free.app/codebase/analyze?repo_name=${{ github.repository }}" \
-            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc0MjA1MDI3MiwianRpIjoiMDRjZTc1MDgtNmUwNC00ODY0LWIxNzAtMjE5YmNiYzQ4MzQ3IiwidHlwZSI6ImFjY2VzcyIsInN1YiI6MywibmJmIjoxNzQyMDUwMjcyLCJjc3JmIjoiNWYyN2Y3ZWYtZDVkOC00NGRmLTlmZmQtN2I0NTY3OTY4ZGVlIiwiZXhwIjoxNzQyMDUxMTcyfQ.je3VLeMH5LlCiDvZ6G-Ti6nwZdRlkw1NNbvoqeBy0fQ" \
-            -H "Content-Type: application/json" \
-            -d '{
-            }'
+            BASE_COMMIT=$(git merge-base ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
+            HEAD_COMMIT=${{ github.event.pull_request.head.sha }}
+            REPO_NAME="${{ github.repository }}"
+            BRANCH_NAME="${{ github.head_ref }}"
+            
+            curl -X POST "https://28d9-197-133-69-11.ngrok-free.app/codebase/analyze" \
+                -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc0MTU2ODA2MSwianRpIjoiYThmZTZhYWUtZDMzYi00MGI5LWI3NGMtYWE2MTBkNjE4OGFiIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6MywibmJmIjoxNzQxNTY4MDYxLCJjc3JmIjoiMjE1ZDczNTItZjk3MS00YTIxLThkNzAtNjk4NDZkYWUxNjdkIiwiZXhwIjoxNzQxNTY4OTYxfQ.y7RC7TkUtgnkBL6FyLAzdPP0-wqRKL1VbiWYZAQu4Q8" \
+                -H "Content-Type: application/json" \
+                -d '{
+                    "base_commit": "'"$BASE_COMMIT"'",
+                    "head_commit": "'"$HEAD_COMMIT"'",
+                    "repo_name": "'"$REPO_NAME"'",
+                    "branch_name": "'"$BRANCH_NAME"'"
+                }'
           continue-on-error: false
