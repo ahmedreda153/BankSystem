@@ -15,6 +15,7 @@ BankAcc::BankAcc()
 
 BankAcc::BankAcc(double bal)
 {
+    // balance
     balance = bal;
 }
 
