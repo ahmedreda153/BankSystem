@@ -24,6 +24,7 @@ public:
     void withdraw();
     void deposit();
     void run();
+    void dummyBankApp();
 };
 
 #endif
