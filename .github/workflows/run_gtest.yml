@@ -19,19 +19,31 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake g++ libgtest-dev jq
-          cd /usr/src/gtest
-          sudo cmake CMakeLists.txt
+          cd /usr/src/googletest
+          sudo mkdir -p build
+          cd build
+          sudo cmake ..
           sudo make
           sudo cp lib/*.a /usr/lib
 
-      - name: Compile with Clang
+      - name: Debug environment
         run: |
-          clang++ -std=c++14 -I/usr/include/gtest -lgtest -lgtest_main -pthread *.cpp -o test_executable
+          ls -la
+          ls -l /usr/lib/libgtest* || echo "GTest libraries not found in /usr/lib"
+          ls -l /usr/include/gtest || echo "GTest headers not found"
+
+      - name: Compile application code
+        run: |
+          clang++ -std=c++14 -c BankApp.cpp -o BankApp.o -v
+        shell: bash
+
+      - name: Compile and link tests
+        run: |
+          clang++ -std=c++14 -I/usr/include/gtest test.cpp BankApp.o -L/usr/lib -lgtest -lgtest_main -pthread -o test_executable -v
         shell: bash
 
       - name: Run specific tests
         run: |
-          # Parse the JSON array input and convert it to a colon-separated list for gtest_filter
           TEST_FILTER=$(echo '${{ github.event.inputs.test_names }}' | jq -r 'join(":")')
           if [ -z "$TEST_FILTER" ] || [ "$TEST_FILTER" = "[]" ]; then
             echo "No specific tests provided, running all tests"
