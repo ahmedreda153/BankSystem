@@ -18,20 +18,26 @@ jobs:
       - name: Set up build environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libgtest-dev
+          sudo apt-get install -y cmake g++ libgtest-dev jq
           cd /usr/src/gtest
           sudo cmake CMakeLists.txt
           sudo make
           sudo cp lib/*.a /usr/lib
 
-    #   - name: Compile with Clang
-    #     run: |
-    #         clang++ -std=c++14 -I/usr/include/gtest -lgtest -lgtest_main -pthread *.cpp -o test_executable
-    #         shell: bash
-    
-        # Step 4: Run a specific test
-      - name: Run specific test
+      - name: Compile with Clang
         run: |
-            # ./test_executable --gtest_filter=MathTests.AddTest
-            echo "Running specific test"
-            echo ${{ github.event.inputs.test_names }}
+          clang++ -std=c++14 -I/usr/include/gtest -lgtest -lgtest_main -pthread *.cpp -o test_executable
+        shell: bash
+
+      - name: Run specific tests
+        run: |
+          # Parse the JSON array input and convert it to a colon-separated list for gtest_filter
+          TEST_FILTER=$(echo '${{ github.event.inputs.test_names }}' | jq -r 'join(":")')
+          if [ -z "$TEST_FILTER" ] || [ "$TEST_FILTER" = "[]" ]; then
+            echo "No specific tests provided, running all tests"
+            ./test_executable
+          else
+            echo "Running tests: $TEST_FILTER"
+            ./test_executable --gtest_filter="$TEST_FILTER"
+          fi
+        shell: bash
