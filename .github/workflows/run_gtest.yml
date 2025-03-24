@@ -1,0 +1,37 @@
+name: Run GTest Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_names:
+        description: 'JSON array of test names to run'
+        required: true
+        default: '[]'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up build environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libgtest-dev
+          cd /usr/src/gtest
+          sudo cmake CMakeLists.txt
+          sudo make
+          sudo cp lib/*.a /usr/lib
+
+    #   - name: Compile with Clang
+    #     run: |
+    #         clang++ -std=c++14 -I/usr/include/gtest -lgtest -lgtest_main -pthread *.cpp -o test_executable
+    #         shell: bash
+    
+        # Step 4: Run a specific test
+      - name: Run specific test
+        run: |
+            # ./test_executable --gtest_filter=MathTests.AddTest
+            echo "Running specific test"
+            echo ${{ github.event.inputs.test_names }}
