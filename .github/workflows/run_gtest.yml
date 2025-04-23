@@ -7,6 +7,9 @@ on:
         description: 'JSON array of test names to run'
         required: true
         default: '[]'
+      analysis_result_id:
+        description: 'Analysis result ID for test report'
+        required: true
 
 jobs:
   test:
@@ -47,9 +50,16 @@ jobs:
           TEST_FILTER=$(echo '${{ github.event.inputs.test_names }}' | jq -r 'join(":")')
           if [ -z "$TEST_FILTER" ] || [ "$TEST_FILTER" = "[]" ]; then
             echo "No specific tests provided, running all tests"
-            ./test_executable
+            ./test_executable  --gtest_output=xml:test_results.xml
           else
             echo "Running tests: $TEST_FILTER"
-            ./test_executable --gtest_filter="$TEST_FILTER"
+            ./test_executable --gtest_filter="$TEST_FILTER" --gtest_output=xml:test_results.xml
           fi
+        shell: bash
+
+      - name: Send test results to server
+        run: |
+          curl -X POST "http://your-server.com/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}" \
+            -H "Content-Type: application/xml" \
+            --data-binary "@test_results.xml"
         shell: bash
