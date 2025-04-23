@@ -22,7 +22,7 @@ jobs:
             BRANCH_NAME="${{ github.head_ref }}"
             
             curl -X POST "https://317d-196-221-51-214.ngrok-free.app/codebase/analyze" \
-                -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc0Mjc3NDE2MiwianRpIjoiNWY2ZjE2OGYtYzRlZC00N2JmLWJjMDItNjYxYTVhNzQ1MmEyIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6MywibmJmIjoxNzQyNzc0MTYyLCJjc3JmIjoiZDllZTAwODMtZTBjMy00MTI0LThhNWItYmExZWMyNjBhOTE1IiwiZXhwIjoxNzQzMzc4OTYyfQ.OFfcsYdfRwmuwVHPph1B9PxN-vvgG7kNbLl7Gk8qPZ4" \
+                -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc0NTQ0MzIxMCwianRpIjoiYTgzMWY1NDUtN2QwMi00YmI1LWFmNDgtODczMDAzODhmYmIwIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6MywibmJmIjoxNzQ1NDQzMjEwLCJjc3JmIjoiNDU2MDllMzAtNWJhZS00YjEzLWE4ODAtYjgxYjRjM2QzZTY0IiwiZXhwIjoxNzQ2MDQ4MDEwfQ.9BHWK0jY-OI95ajYUm_eMbDVlIt_yUybcWLLrQ_NH9g" \
                 -H "Content-Type: application/json" \
                 -d '{
                     "base_commit": "'"$BASE_COMMIT"'",
