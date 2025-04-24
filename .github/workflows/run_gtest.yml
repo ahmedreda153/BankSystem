@@ -59,7 +59,7 @@ jobs:
 
       - name: Send test results to server
         run: |
-          curl -X POST "https://317d-196-221-51-214.ngrok-free.app/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}" \
+          curl -X POST "https://f07e-196-221-51-214.ngrok-free.app/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}" \
             -H "Content-Type: application/xml" \
             --data-binary "@test_results.xml"
         shell: bash
