@@ -21,7 +21,7 @@ jobs:
             REPO_NAME="${{ github.repository }}"
             BRANCH_NAME="${{ github.head_ref }}"
             
-            curl -X POST "https://317d-196-221-51-214.ngrok-free.app/codebase/analyze" \
+            curl -X POST "https://f07e-196-221-51-214.ngrok-free.app/codebase/analyze" \
                 -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc0NTQ0MzIxMCwianRpIjoiYTgzMWY1NDUtN2QwMi00YmI1LWFmNDgtODczMDAzODhmYmIwIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6MywibmJmIjoxNzQ1NDQzMjEwLCJjc3JmIjoiNDU2MDllMzAtNWJhZS00YjEzLWE4ODAtYjgxYjRjM2QzZTY0IiwiZXhwIjoxNzQ2MDQ4MDEwfQ.9BHWK0jY-OI95ajYUm_eMbDVlIt_yUybcWLLrQ_NH9g" \
                 -H "Content-Type: application/json" \
                 -d '{
