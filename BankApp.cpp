@@ -22,6 +22,7 @@ BankAcc::BankAcc(double bal)
 void BankAcc::setAccountID(string ID)
 {
     accountID = ID;
+    cuot << "unknown"
 }
 
 bool BankAcc::setBalance(double bal)
