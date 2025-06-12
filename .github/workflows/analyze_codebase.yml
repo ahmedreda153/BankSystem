@@ -24,7 +24,7 @@ jobs:
             REPO_NAME="${{ github.repository }}"
             BRANCH_NAME="${{ github.head_ref }}"
 
-            response=$(curl -s -w "%{http_code}" -o response.txt -X POST "https://fastestai.tech/codebase/analyze" \
+            response_code=$(curl -s -o response.txt -w "%{http_code}" -X POST "https://fastestai.tech/codebase/analyze" \
               -H "X-Secret-Key: $FASTEST_SECRET_KEY" \
               -H "Content-Type: application/json" \
               -d '{
@@ -33,9 +33,8 @@ jobs:
                   "repo_name": "'$REPO_NAME'",
                   "branch_name": "'$BRANCH_NAME'"
               }')
-            status_code=$(tail -c 3 <<< "$response")
-            if [ "$status_code" -ne 200 ]; then
-              echo "Request failed with status code $status_code"
+            if [ "$response_code" -ne 200 ]; then
+              echo "Request failed with status code $response_code"
               cat response.txt
               exit 1
             fi
