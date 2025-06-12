@@ -17,8 +17,8 @@ TEST_F(BankAccTest, DefaultConstructor) {
 
 // Test parameterized constructor
 TEST_F(BankAccTest, ParameterizedConstructor) {
-    BankAcc account(100.0);
-    EXPECT_EQ(account.getBalance(), 100.0);
+    BankAcc account(10.0);
+    EXPECT_EQ(account.getBalance(), 10.0);
 }
 
 // Test setAccountID and getAccountID
@@ -65,6 +65,11 @@ TEST_F(BankAccTest, Deposit) {
     EXPECT_EQ(account.getBalance(), 100.0);
 }
 
+// // Test dummy method
+// TEST_F(BankAccTest, Dummy) {
+//     account.dummy();//dummy function
+// }
+
 // Test fixture for SavingsBankAcc class
 class SavingsBankAccTest : public ::testing::Test {
 protected:
@@ -106,6 +111,82 @@ TEST_F(SavingsBankAccTest, Deposit) {
     EXPECT_TRUE(account.deposit(150.0));
     EXPECT_EQ(account.getBalance(), 150.0);
 }
+
+class BankAppTest : public ::testing::Test {
+    protected:
+        BankApp bankApp;
+    };
+
+// Test listClients() output
+TEST_F(BankAppTest, ListClientsOutputsCorrectly) {
+    std::stringstream buffer;
+    std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
+
+    // Call method
+    bankApp.listClients();
+
+    std::cout.rdbuf(prevcout); // Restore std::cout
+
+    // Verify output
+    EXPECT_EQ(buffer.str(), "List of Clients and Accounts\n");
+}
+
+// Test withdraw() output
+TEST_F(BankAppTest, WithdrawOutputsCorrectly) {
+    std::stringstream buffer;
+    std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
+
+    // Call method
+    bankApp.withdraw();
+
+    std::cout.rdbuf(prevcout); // Restore std::cout
+
+    // Verify output
+    EXPECT_EQ(buffer.str(), "Withdraw done\n");
+}
+
+// Test withdraw() output
+TEST_F(BankAppTest, WithdrawOutputsCorrectlyNew) {
+    std::stringstream buffer;
+    std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
+
+    // Call method
+    bankApp.withdraw();
+
+    std::cout.rdbuf(prevcout); // Restore std::cout
+
+    // Verify output
+    EXPECT_EQ(buffer.str(), "Withdraw done\n");
+}
+
+//Test dummyBankApp() output
+TEST_F(BankAppTest, DummyBankAppOutputsCorrectly) {
+    std::stringstream buffer;
+    std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
+
+    // Call method
+    bankApp.dummyBankApp();
+
+    std::cout.rdbuf(prevcout); // Restore std::cout
+
+    // Verify output
+    EXPECT_EQ(buffer.str(), "List of Clients and Accounts\n");
+}
+
+// Test deposit() output
+TEST_F(BankAppTest, DepositOutputsCorrectly) {
+    std::stringstream buffer;
+    std::streambuf* prevcout = std::cout.rdbuf(buffer.rdbuf()); // Redirect std::cout
+
+    // Call method
+    bankApp.deposit();
+
+    std::cout.rdbuf(prevcout); // Restore std::cout
+
+    // Verify output
+    EXPECT_EQ(buffer.str(), "Deposit done\n");
+}
+
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
