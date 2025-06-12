@@ -104,25 +104,25 @@ jobs:
           echo "compiler=$COMPILER" >> $GITHUB_OUTPUT
           echo "Detected compiler: $COMPILER"
           
-          # Find source files (excluding test files and common build directories)
+          # Find source files (excluding test files and main files)
           SOURCE_FILES=$(find . \
             -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" \
             ! -path "*/build/*" ! -path "*/Build/*" ! -path "*/BUILD/*" \
             ! -path "*/test/*" ! -path "*/tests/*" ! -path "*/Test/*" ! -path "*/Tests/*" \
             ! -name "*test*" ! -name "*Test*" ! -name "*TEST*" \
-            ! -name "main.cpp" ! -name "main.cc" \
-            | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            ! -name "main.cpp" ! -name "main.cc" ! -name "main.cxx" \
+            | sort | uniq | jq -R -s -c 'split("\n") | map(select(length > 0))')
           echo "source-files=$SOURCE_FILES" >> $GITHUB_OUTPUT
           echo "Found source files: $SOURCE_FILES"
           
-          # Find test files
+          # Find test files (ensure uniqueness and exclude main functions)
           TEST_FILES=$(find . \
             -name "*test*.cpp" -o -name "*test*.cc" -o -name "*test*.cxx" \
             -o -name "*Test*.cpp" -o -name "*Test*.cc" -o -name "*Test*.cxx" \
             -o -name "*TEST*.cpp" -o -name "*TEST*.cc" -o -name "*TEST*.cxx" \
             -o -path "*/test*/*.cpp" -o -path "*/Test*/*.cpp" \
             ! -path "*/build/*" ! -path "*/Build/*" ! -path "*/BUILD/*" \
-            | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            | sort | uniq | jq -R -s -c 'split("\n") | map(select(length > 0))')
           echo "test-files=$TEST_FILES" >> $GITHUB_OUTPUT
           echo "Found test files: $TEST_FILES"
           
@@ -134,13 +134,13 @@ jobs:
           echo "include-dirs=$INCLUDE_DIRS" >> $GITHUB_OUTPUT
           echo "Found include directories: $INCLUDE_DIRS"
           
-          # Check for custom main function
+          # Check for custom main function in test files
           HAS_CUSTOM_MAIN="false"
-          if grep -r "int main(" . --include="*.cpp" --include="*.cc" --include="*.cxx" >/dev/null 2>&1; then
+          if echo "$TEST_FILES" | jq -r '.[]' | xargs grep -l "int main(" 2>/dev/null | head -1 >/dev/null; then
             HAS_CUSTOM_MAIN="true"
           fi
           echo "has-custom-main=$HAS_CUSTOM_MAIN" >> $GITHUB_OUTPUT
-          echo "Has custom main: $HAS_CUSTOM_MAIN"
+          echo "Has custom main in tests: $HAS_CUSTOM_MAIN"
           
           # Determine project structure
           if [ -d "src" ] && [ -d "test" ]; then
@@ -238,6 +238,8 @@ jobs:
           # Filter out test files and main files
           list(FILTER SOURCES EXCLUDE REGEX ".*[Tt]est.*")
           list(FILTER SOURCES EXCLUDE REGEX ".*main\\.cpp$")
+          list(FILTER SOURCES EXCLUDE REGEX ".*main\\.cc$")
+          list(FILTER SOURCES EXCLUDE REGEX ".*main\\.cxx$")
           
           # Auto-discover test files
           file(GLOB_RECURSE TEST_SOURCES 
@@ -288,14 +290,16 @@ jobs:
           TEST_FILES='${{ needs.analyze-project.outputs.test-files }}'
           INCLUDE_DIRS="${{ needs.analyze-project.outputs.include-dirs }}"
           CPP_STANDARD="${{ needs.analyze-project.outputs.cpp-standard }}"
+          HAS_CUSTOM_MAIN="${{ needs.analyze-project.outputs.has-custom-main }}"
           
           echo "Source files: $SOURCE_FILES"
           echo "Test files: $TEST_FILES"
           echo "Include dirs: $INCLUDE_DIRS"
+          echo "Has custom main: $HAS_CUSTOM_MAIN"
           
-          # Convert JSON arrays to space-separated strings
-          SOURCE_LIST=$(echo "$SOURCE_FILES" | jq -r '.[] | select(length > 0)' | tr '\n' ' ')
-          TEST_LIST=$(echo "$TEST_FILES" | jq -r '.[] | select(length > 0)' | tr '\n' ' ')
+          # Convert JSON arrays to space-separated strings and remove duplicates
+          SOURCE_LIST=$(echo "$SOURCE_FILES" | jq -r '.[] | select(length > 0)' | sort | uniq | tr '\n' ' ')
+          TEST_LIST=$(echo "$TEST_FILES" | jq -r '.[] | select(length > 0)' | sort | uniq | tr '\n' ' ')
           
           echo "Parsed source files: $SOURCE_LIST"
           echo "Parsed test files: $TEST_LIST"
@@ -305,22 +309,42 @@ jobs:
             exit 1
           fi
           
+          # Remove any potential duplicates and main.cpp from source list
+          FILTERED_SOURCES=""
+          for src in $SOURCE_LIST; do
+            if [ -f "$src" ] && [[ "$src" != *"main.cpp"* ]] && [[ "$src" != *"main.cc"* ]] && [[ "$src" != *"main.cxx"* ]]; then
+              FILTERED_SOURCES="$FILTERED_SOURCES $src"
+            fi
+          done
+          
+          # Check if test files contain main function
+          GTEST_MAIN_FLAG=""
+          if [ "$HAS_CUSTOM_MAIN" = "true" ]; then
+            echo "Test files contain custom main function"
+            GTEST_MAIN_FLAG=""
+          else
+            echo "Using GTest main function"
+            GTEST_MAIN_FLAG="-lgtest_main"
+          fi
+          
           # Determine compiler flags
           COMPILER_FLAGS="-std=$CPP_STANDARD -Wall -g"
           LINKER_FLAGS="-pthread"
           
           # Try to link with GTest using pkg-config first
           if pkg-config --exists gtest; then
-            GTEST_FLAGS=$(pkg-config --cflags --libs gtest)
-            echo "Using pkg-config for GTest: $GTEST_FLAGS"
+            GTEST_CFLAGS=$(pkg-config --cflags gtest)
+            GTEST_LIBS=$(pkg-config --libs gtest)
+            echo "Using pkg-config for GTest: $GTEST_CFLAGS $GTEST_LIBS"
           else
             # Fallback to manual GTest linking
-            GTEST_FLAGS="-I/usr/include/gtest -L/usr/lib -L/usr/local/lib -lgtest -lgtest_main"
-            echo "Using manual GTest linking: $GTEST_FLAGS"
+            GTEST_CFLAGS="-I/usr/include/gtest"
+            GTEST_LIBS="-L/usr/lib -L/usr/local/lib -lgtest"
+            echo "Using manual GTest linking: $GTEST_CFLAGS $GTEST_LIBS"
           fi
           
           # Build command
-          BUILD_CMD="$CXX $COMPILER_FLAGS $INCLUDE_DIRS $SOURCE_LIST $TEST_LIST $GTEST_FLAGS $LINKER_FLAGS -o test_runner"
+          BUILD_CMD="$CXX $COMPILER_FLAGS $INCLUDE_DIRS $GTEST_CFLAGS $FILTERED_SOURCES $TEST_LIST $GTEST_LIBS $GTEST_MAIN_FLAG $LINKER_FLAGS -o test_runner"
           
           echo "Build command: $BUILD_CMD"
           
