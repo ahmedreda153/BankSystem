@@ -15,19 +15,28 @@ jobs:
             fetch-depth: 0 
             
         - name: Send Diff to Backend
+          env:
+            FASTEST_SECRET_KEY: ${{ secrets.FASTEST_SECRET_KEY }}
           run: |
+            set -e
             BASE_COMMIT=$(git merge-base ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
             HEAD_COMMIT=${{ github.event.pull_request.head.sha }}
             REPO_NAME="${{ github.repository }}"
             BRANCH_NAME="${{ github.head_ref }}"
-            
-            curl -X POST "https://f07e-196-221-51-214.ngrok-free.app/codebase/analyze" \
-                -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc0NTQ0MzIxMCwianRpIjoiYTgzMWY1NDUtN2QwMi00YmI1LWFmNDgtODczMDAzODhmYmIwIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6MywibmJmIjoxNzQ1NDQzMjEwLCJjc3JmIjoiNDU2MDllMzAtNWJhZS00YjEzLWE4ODAtYjgxYjRjM2QzZTY0IiwiZXhwIjoxNzQ2MDQ4MDEwfQ.9BHWK0jY-OI95ajYUm_eMbDVlIt_yUybcWLLrQ_NH9g" \
-                -H "Content-Type: application/json" \
-                -d '{
-                    "base_commit": "'"$BASE_COMMIT"'",
-                    "head_commit": "'"$HEAD_COMMIT"'",
-                    "repo_name": "'"$REPO_NAME"'",
-                    "branch_name": "'"$BRANCH_NAME"'"
-                }'
+
+            response=$(curl -s -w "%{http_code}" -o response.txt -X POST "https://fastestai.tech/codebase/analyze" \
+              -H "Authorization: Bearer $FASTEST_SECRET_KEY" \
+              -H "Content-Type: application/json" \
+              -d '{
+                  "base_commit": "'$BASE_COMMIT'",
+                  "head_commit": "'$HEAD_COMMIT'",
+                  "repo_name": "'$REPO_NAME'",
+                  "branch_name": "'$BRANCH_NAME'"
+              }')
+            status_code=$(tail -c 3 <<< "$response")
+            if [ "$status_code" -ne 200 ]; then
+              echo "Request failed with status code $status_code"
+              cat response.txt
+              exit 1
+            fi
           continue-on-error: false
