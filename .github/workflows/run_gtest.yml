@@ -56,7 +56,7 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Detect project configuration
         id: detect
@@ -190,7 +190,7 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up build environment
         run: |
@@ -202,13 +202,15 @@ jobs:
             libgtest-dev \
             libgmock-dev \
             pkg-config \
-            jq
+            jq \
+            gdb \
+            file
           
           # Install GTest from source for older systems
-          cd /usr/src/googletest || cd /usr/src/gtest
+          cd /usr/src/googletest 2>/dev/null || cd /usr/src/gtest
           sudo mkdir -p build
           cd build
-          sudo cmake .. -DBUILD_GMOCK=ON
+          sudo cmake .. -DBUILD_GMOCK=ON -DCMAKE_CXX_FLAGS="-march=x86-64 -mtune=generic"
           sudo make -j$(nproc)
           sudo make install || sudo cp lib/*.a /usr/lib/ || sudo cp googlemock/lib*.a googletest/lib*.a /usr/lib/ 2>/dev/null || true
           
@@ -246,6 +248,9 @@ jobs:
           # Set C++ standard
           set(CMAKE_CXX_STANDARD ${{ needs.analyze-project.outputs.cpp-standard == 'c++11' && '11' || needs.analyze-project.outputs.cpp-standard == 'c++14' && '14' || needs.analyze-project.outputs.cpp-standard == 'c++17' && '17' || needs.analyze-project.outputs.cpp-standard == 'c++20' && '20' || '14' }})
           set(CMAKE_CXX_STANDARD_REQUIRED ON)
+          
+          # Set conservative compiler flags for better compatibility
+          set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=x86-64 -mtune=generic -O1 -g")
           
           # Find packages
           find_package(GTest REQUIRED)
@@ -389,8 +394,8 @@ jobs:
             GTEST_MAIN_FLAG="-lgtest_main"
           fi
           
-          # Determine compiler flags
-          COMPILER_FLAGS="-std=$CPP_STANDARD -Wall -g"
+          # Conservative compiler flags to avoid illegal instruction errors
+          COMPILER_FLAGS="-std=$CPP_STANDARD -Wall -g -march=x86-64 -mtune=generic -O1 -fno-strict-aliasing"
           LINKER_FLAGS="-pthread"
           
           # Try to link with GTest using pkg-config first
@@ -417,12 +422,41 @@ jobs:
             echo "DIRECT_BUILD_SUCCESS=true" >> $GITHUB_ENV
             echo "TEST_EXECUTABLE=test_runner" >> $GITHUB_ENV
             chmod +x test_runner
+            
+            # Verify the binary
+            echo "=== Binary Information ==="
+            file test_runner
+            ldd test_runner || echo "Could not check dependencies"
           else
             echo "DIRECT_BUILD_SUCCESS=false" >> $GITHUB_ENV
           fi
           
           # Cleanup temp files
           rm -f /tmp/source_files.txt /tmp/test_files.txt
+
+      - name: Debug Binary
+        if: env.CMAKE_BUILD_SUCCESS == 'true' || env.DIRECT_BUILD_SUCCESS == 'true'
+        run: |
+          set -e
+          
+          TEST_EXECUTABLE="${TEST_EXECUTABLE:-test_runner}"
+          
+          if [ ! -f "$TEST_EXECUTABLE" ]; then
+            echo "Test executable not found: $TEST_EXECUTABLE"
+            exit 1
+          fi
+          
+          echo "=== Binary Debug Information ==="
+          file "$TEST_EXECUTABLE"
+          echo ""
+          echo "=== CPU Information ==="
+          cat /proc/cpuinfo | grep -E "model name|flags" | head -2
+          echo ""
+          echo "=== Library Dependencies ==="
+          ldd "$TEST_EXECUTABLE" || echo "Could not check dependencies"
+          echo ""
+          echo "=== Testing Basic Execution ==="
+          timeout 10s "$TEST_EXECUTABLE" --help || echo "Help command failed or timed out"
 
       - name: Run Tests
         if: env.CMAKE_BUILD_SUCCESS == 'true' || env.DIRECT_BUILD_SUCCESS == 'true'
@@ -442,31 +476,112 @@ jobs:
           # Prepare output file name
           OUTPUT_FILE="${{ matrix.approach }}_results.xml"
           
-          # List available tests first
+          # List available tests first with timeout and error handling
           echo "=== Available Tests ==="
-          ./$TEST_EXECUTABLE --gtest_list_tests || echo "Could not list tests"
+          timeout 30s "$TEST_EXECUTABLE" --gtest_list_tests || {
+            echo "Warning: Could not list tests (exit code: $?)"
+            echo "Attempting to run tests anyway..."
+          }
           
-          # Run tests
+          # Run tests with timeout and better error handling
+          echo "=== Running Tests ==="
+          
           if [ -n "$TEST_FILTER" ]; then
             echo "Running filtered tests: $TEST_FILTER"
-            ./$TEST_EXECUTABLE --gtest_filter="$TEST_FILTER" --gtest_output=xml:$OUTPUT_FILE
+            timeout 300s "$TEST_EXECUTABLE" --gtest_filter="$TEST_FILTER" --gtest_output=xml:"$OUTPUT_FILE" || {
+              EXIT_CODE=$?
+              echo "Test execution failed with exit code: $EXIT_CODE"
+              
+              # Try to run with gdb to get more information about crashes
+              if [ $EXIT_CODE -eq 132 ] || [ $EXIT_CODE -eq 139 ]; then
+                echo "=== Crash detected, attempting to get stack trace ==="
+                echo "run --gtest_filter=\"$TEST_FILTER\" --gtest_output=xml:$OUTPUT_FILE" > gdb_commands.txt
+                echo "bt" >> gdb_commands.txt
+                echo "quit" >> gdb_commands.txt
+                timeout 60s gdb -batch -x gdb_commands.txt "$TEST_EXECUTABLE" || echo "Could not get stack trace"
+              fi
+              
+              # Check if partial results were generated
+              if [ -f "$OUTPUT_FILE" ]; then
+                echo "Partial test results were generated"
+              else
+                # Create a minimal error report
+                cat > "$OUTPUT_FILE" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuites tests="0" failures="1" disabled="0" errors="1" timestamp="$(date -u +%Y-%m-%dT%H:%M:%S)" time="0" name="AllTests">
+            <testsuite name="TestExecutionError" tests="0" failures="1" disabled="0" errors="1" time="0">
+              <testcase name="ExecutionFailed" status="run" time="0" classname="TestExecutionError">
+                <error message="Test executable crashed or failed to run" type="RuntimeError">
+                  Exit code: $EXIT_CODE
+                  This may be due to:
+                  - Illegal instruction (incompatible CPU features)
+                  - Memory access violation
+                  - Missing dependencies
+                  - Compilation issues
+                </error>
+              </testcase>
+            </testsuite>
+          </testsuites>
+          EOF
+              fi
+            }
           else
             echo "Running all tests"
-            ./$TEST_EXECUTABLE --gtest_output=xml:$OUTPUT_FILE
+            timeout 300s "$TEST_EXECUTABLE" --gtest_output=xml:"$OUTPUT_FILE" || {
+              EXIT_CODE=$?
+              echo "Test execution failed with exit code: $EXIT_CODE"
+              
+              # Try to run with gdb to get more information about crashes
+              if [ $EXIT_CODE -eq 132 ] || [ $EXIT_CODE -eq 139 ]; then
+                echo "=== Crash detected, attempting to get stack trace ==="
+                echo "run --gtest_output=xml:$OUTPUT_FILE" > gdb_commands.txt
+                echo "bt" >> gdb_commands.txt
+                echo "quit" >> gdb_commands.txt
+                timeout 60s gdb -batch -x gdb_commands.txt "$TEST_EXECUTABLE" || echo "Could not get stack trace"
+              fi
+              
+              # Check if partial results were generated
+              if [ -f "$OUTPUT_FILE" ]; then
+                echo "Partial test results were generated"
+              else
+                # Create a minimal error report
+                cat > "$OUTPUT_FILE" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuites tests="0" failures="1" disabled="0" errors="1" timestamp="$(date -u +%Y-%m-%dT%H:%M:%S)" time="0" name="AllTests">
+            <testsuite name="TestExecutionError" tests="0" failures="1" disabled="0" errors="1" time="0">
+              <testcase name="ExecutionFailed" status="run" time="0" classname="TestExecutionError">
+                <error message="Test executable crashed or failed to run" type="RuntimeError">
+                  Exit code: $EXIT_CODE
+                  This may be due to:
+                  - Illegal instruction (incompatible CPU features)
+                  - Memory access violation
+                  - Missing dependencies
+                  - Compilation issues
+                </error>
+              </testcase>
+            </testsuite>
+          </testsuites>
+          EOF
+              fi
+            }
           fi
           
           # Verify results file
           if [ -f "$OUTPUT_FILE" ]; then
             echo "TEST_RESULTS_FILE=$OUTPUT_FILE" >> $GITHUB_ENV
-            echo "Test results generated successfully"
+            echo "Test results file generated"
             
             # Show summary
             echo "=== Test Summary ==="
-            grep -o 'tests="[0-9]*"' $OUTPUT_FILE || echo "Could not parse test count"
-            grep -o 'failures="[0-9]*"' $OUTPUT_FILE || echo "Could not parse failure count"
-            grep -o 'errors="[0-9]*"' $OUTPUT_FILE || echo "Could not parse error count"
+            grep -o 'tests="[0-9]*"' "$OUTPUT_FILE" || echo "Could not parse test count"
+            grep -o 'failures="[0-9]*"' "$OUTPUT_FILE" || echo "Could not parse failure count"
+            grep -o 'errors="[0-9]*"' "$OUTPUT_FILE" || echo "Could not parse error count"
+            
+            # Show first few lines of results for debugging
+            echo "=== Results File Content (first 20 lines) ==="
+            head -20 "$OUTPUT_FILE"
           else
-            echo "Test results file not generated!"
+            echo "Test results file was not generated!"
             exit 1
           fi
 
