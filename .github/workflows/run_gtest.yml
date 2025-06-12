@@ -1,4 +1,4 @@
-name: Run GTest Tests
+name: Run GTest Tests on Multiple Files
 
 on:
   workflow_dispatch:
@@ -10,10 +10,70 @@ on:
       analysis_result_id:
         description: 'Analysis result ID for test report'
         required: true
+      source_files:
+        description: 'JSON array of source files to compile (empty for auto-discovery)'
+        required: false
+        default: '[]'
+      test_files:
+        description: 'JSON array of test files to run (empty for auto-discovery)'
+        required: false
+        default: '[]'
+      include_directories:
+        description: 'Additional include directories (space-separated)'
+        required: false
+        default: ''
+      run_combined:
+        description: 'Run all tests in a single executable'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      cpp_standard:
+        description: 'C++ standard version'
+        required: false
+        default: 'c++14'
+        type: choice
+        options:
+          - 'c++11'
+          - 'c++14' 
+          - 'c++17'
+          - 'c++20'
 
 jobs:
-  test:
+  discover-files:
     runs-on: ubuntu-latest
+    outputs:
+      source-files: ${{ steps.discover.outputs.source-files }}
+      test-files: ${{ steps.discover.outputs.test-files }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Discover source and test files
+        id: discover
+        run: |
+          # Find all C++ source files (excluding test files)
+          SOURCE_FILES=$(find . -name "*.cpp" -not -path "*/test*" -not -name "*test*" | jq -R -s -c 'split("\n")[:-1]')
+          
+          # Find all test files
+          TEST_FILES=$(find . -name "*test*.cpp" -o -name "test_*.cpp" -o -name "*_test.cpp" | jq -R -s -c 'split("\n")[:-1]')
+          
+          echo "source-files=$SOURCE_FILES" >> $GITHUB_OUTPUT
+          echo "test-files=$TEST_FILES" >> $GITHUB_OUTPUT
+          
+          echo "Discovered source files: $SOURCE_FILES"
+          echo "Discovered test files: $TEST_FILES"
+
+  test:
+    needs: discover-files
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test-file: ${{ fromJson(needs.discover-files.outputs.test-files) }}
+      fail-fast: false
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -43,47 +103,175 @@ jobs:
           ls -l /usr/lib/libgtest* || echo "GTest libraries not found in /usr/lib"
           ls -l /usr/include/gtest || echo "GTest headers not found"
 
-      - name: Compile application code
+      - name: Compile source files
         run: |
           set -e
-          clang++ -std=c++14 -c BankApp.cpp -o BankApp.o -v
+          
+          # Use input source files or discovered ones
+          if [ "${{ github.event.inputs.source_files }}" != "" ]; then
+            SOURCE_FILES='${{ github.event.inputs.source_files }}'
+          else
+            SOURCE_FILES='${{ needs.discover-files.outputs.source-files }}'
+          fi
+          
+          echo "Compiling source files: $SOURCE_FILES"
+          
+          # Compile each source file
+          for file in $(echo "$SOURCE_FILES" | jq -r '.[]'); do
+            if [ -f "$file" ]; then
+              echo "Compiling $file"
+              clang++ -std=c++14 -c "$file" -o "${file%.cpp}.o" ${{ github.event.inputs.include_directories }} -v
+            fi
+          done
         shell: bash
 
-      - name: Compile and link tests
+      - name: Compile and link test
         run: |
           set -e
-          clang++ -std=c++14 -I/usr/include/gtest test.cpp BankApp.o -L/usr/lib -lgtest -lgtest_main -pthread -o test_executable -v
+          
+          # Get all object files
+          OBJECT_FILES=$(find . -name "*.o" | tr '\n' ' ')
+          echo "Object files: $OBJECT_FILES"
+          
+          # Get test file name without extension for executable
+          TEST_NAME=$(basename "${{ matrix.test-file }}" .cpp)
+          
+          echo "Compiling test: ${{ matrix.test-file }}"
+          clang++ -std=c++14 -I/usr/include/gtest "${{ matrix.test-file }}" $OBJECT_FILES \
+            -L/usr/lib -lgtest -lgtest_main -pthread \
+            -o "${TEST_NAME}_executable" \
+            ${{ github.event.inputs.include_directories }} -v
         shell: bash
 
       - name: Run specific tests
         run: |
           set -e
+          
+          TEST_NAME=$(basename "${{ matrix.test-file }}" .cpp)
+          EXECUTABLE="${TEST_NAME}_executable"
+          
           TEST_FILTER=$(echo '${{ github.event.inputs.test_names }}' | jq -r 'join(":")')
-          if [ -z "$TEST_FILTER" ]; then
-            echo "No specific tests provided, running all tests"
-            ./test_executable --gtest_output=xml:test_results.xml
+          
+          if [ -z "$TEST_FILTER" ] || [ "$TEST_FILTER" = "null" ]; then
+            echo "No specific tests provided, running all tests in ${{ matrix.test-file }}"
+            ./$EXECUTABLE --gtest_output=xml:${TEST_NAME}_results.xml
           else
-            echo "Running tests: $TEST_FILTER"
-            ./test_executable --gtest_filter="$TEST_FILTER" --gtest_output=xml:test_results.xml
+            echo "Running tests: $TEST_FILTER from ${{ matrix.test-file }}"
+            ./$EXECUTABLE --gtest_filter="$TEST_FILTER" --gtest_output=xml:${TEST_NAME}_results.xml
           fi
         shell: bash
 
       - name: Send test results to server
         env:
-            FASTEST_SECRET_KEY: ${{ secrets.FASTEST_SECRET_KEY }}
+          FASTEST_SECRET_KEY: ${{ secrets.FASTEST_SECRET_KEY }}
         run: |
           set -e
-          response_code=$(curl -s -o response.txt -w "%{http_code}" -X POST "https://fastestai.tech/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}" \
+          
+          TEST_NAME=$(basename "${{ matrix.test-file }}" .cpp)
+          RESULTS_FILE="${TEST_NAME}_results.xml"
+          
+          response_code=$(curl -s -o response.txt -w "%{http_code}" -X POST \
+            "https://fastestai.tech/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}&test_file=${{ matrix.test-file }}" \
             -H "X-Secret-Key: $FASTEST_SECRET_KEY" \
             -H "Content-Type: application/xml" \
-            --data-binary "@test_results.xml")
+            --data-binary "@$RESULTS_FILE")
+          
           if [ "$response_code" -ne 200 ]; then
-            echo "Failed to send test results! Status code: $response_code"
+            echo "Failed to send test results for ${{ matrix.test-file }}! Status code: $response_code"
             cat response.txt
             echo "Test results XML:"
-            cat test_results.xml
+            cat $RESULTS_FILE
             exit 1
           else
-            echo "Test results sent successfully. Status code: $response_code"
+            echo "Test results for ${{ matrix.test-file }} sent successfully. Status code: $response_code"
+          fi
+        shell: bash
+
+  # Alternative job for running all tests together
+  test-all-combined:
+    if: github.event.inputs.run_combined == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up C++ toolchain
+        uses: aminya/setup-cpp@v1
+        with:
+          compiler: clang++
+          cmake: true
+
+      - name: Install GTest and dependencies
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y libgtest-dev jq
+          cd /usr/src/googletest
+          sudo mkdir -p build
+          cd build
+          sudo cmake ..
+          sudo make
+          sudo cp lib/*.a /usr/lib
+
+      - name: Compile all source files
+        run: |
+          set -e
+          
+          # Find and compile all C++ source files (excluding tests)
+          find . -name "*.cpp" -not -path "*/test*" -not -name "*test*" -exec clang++ -std=c++14 -c {} -o {}.o ${{ github.event.inputs.include_directories }} -v \;
+        shell: bash
+
+      - name: Compile and link all tests
+        run: |
+          set -e
+          
+          # Get all object files and test files
+          OBJECT_FILES=$(find . -name "*.cpp.o" | tr '\n' ' ')
+          TEST_FILES=$(find . -name "*test*.cpp" -o -name "test_*.cpp" -o -name "*_test.cpp" | tr '\n' ' ')
+          
+          echo "Object files: $OBJECT_FILES"
+          echo "Test files: $TEST_FILES"
+          
+          clang++ -std=c++14 -I/usr/include/gtest $TEST_FILES $OBJECT_FILES \
+            -L/usr/lib -lgtest -lgtest_main -pthread \
+            -o combined_test_executable \
+            ${{ github.event.inputs.include_directories }} -v
+        shell: bash
+
+      - name: Run combined tests
+        run: |
+          set -e
+          
+          TEST_FILTER=$(echo '${{ github.event.inputs.test_names }}' | jq -r 'join(":")')
+          
+          if [ -z "$TEST_FILTER" ] || [ "$TEST_FILTER" = "null" ]; then
+            echo "Running all tests"
+            ./combined_test_executable --gtest_output=xml:combined_test_results.xml
+          else
+            echo "Running tests: $TEST_FILTER"
+            ./combined_test_executable --gtest_filter="$TEST_FILTER" --gtest_output=xml:combined_test_results.xml
+          fi
+        shell: bash
+
+      - name: Send combined test results
+        env:
+          FASTEST_SECRET_KEY: ${{ secrets.FASTEST_SECRET_KEY }}
+        run: |
+          set -e
+          
+          response_code=$(curl -s -o response.txt -w "%{http_code}" -X POST \
+            "https://fastestai.tech/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}&test_type=combined" \
+            -H "X-Secret-Key: $FASTEST_SECRET_KEY" \
+            -H "Content-Type: application/xml" \
+            --data-binary "@combined_test_results.xml")
+          
+          if [ "$response_code" -ne 200 ]; then
+            echo "Failed to send combined test results! Status code: $response_code"
+            cat response.txt
+            echo "Test results XML:"
+            cat combined_test_results.xml
+            exit 1
+          else
+            echo "Combined test results sent successfully. Status code: $response_code"
           fi
         shell: bash
