@@ -80,17 +80,17 @@ jobs:
             FASTEST_SECRET_KEY: ${{ secrets.FASTEST_SECRET_KEY }}
         run: |
           set -e
-          STATUS_CODE=$(curl -s -o response.txt -w "%{http_code}" -X POST "https://fastestai.tech/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}" \
+          response_code=$(curl -s -o response.txt -w "%{http_code}" -X POST "https://fastestai.tech/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}" \
             -H "X-Secret-Key: $FASTEST_SECRET_KEY" \
             -H "Content-Type: application/xml" \
             --data-binary "@test_results.xml")
-          if [ "$STATUS_CODE" -ne 200 ]; then
-            echo "Failed to send test results! Status code: $STATUS_CODE"
+          if [ "$response_code" -ne 200 ]; then
+            echo "Failed to send test results! Status code: $response_code"
             cat response.txt
             echo "Test results XML:"
             cat test_results.xml
             exit 1
           else
-            echo "Test results sent successfully. Status code: $STATUS_CODE"
+            echo "Test results sent successfully. Status code: $response_code"
           fi
         shell: bash
