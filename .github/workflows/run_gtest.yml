@@ -187,8 +187,10 @@ jobs:
           sudo make -j$(nproc)
           sudo make install || sudo cp lib/*.a /usr/lib/ || sudo cp googlemock/lib*.a googletest/lib*.a /usr/lib/ 2>/dev/null || true
           
-          # Ensure GTest is available
-          ldconfig
+          # Update library cache with proper permissions
+          sudo ldconfig
+          
+          # Verify GTest installation
           pkg-config --exists gtest || echo "GTest pkg-config not found, will use manual linking"
 
       - name: Setup compiler
@@ -314,8 +316,28 @@ jobs:
             GTEST_FLAGS=$(pkg-config --cflags --libs gtest)
             echo "Using pkg-config for GTest: $GTEST_FLAGS"
           else
-            # Fallback to manual GTest linking
-            GTEST_FLAGS="-I/usr/include/gtest -L/usr/lib -L/usr/local/lib -lgtest -lgtest_main"
+            # Fallback to manual GTest linking - try multiple common locations
+            GTEST_FLAGS=""
+            
+            # Check for GTest in standard locations
+            if [ -f "/usr/lib/x86_64-linux-gnu/libgtest.a" ]; then
+              GTEST_FLAGS="-I/usr/include/gtest -L/usr/lib/x86_64-linux-gnu -lgtest -lgtest_main"
+            elif [ -f "/usr/local/lib/libgtest.a" ]; then
+              GTEST_FLAGS="-I/usr/include/gtest -L/usr/local/lib -lgtest -lgtest_main"
+            elif [ -f "/usr/lib/libgtest.a" ]; then
+              GTEST_FLAGS="-I/usr/include/gtest -L/usr/lib -lgtest -lgtest_main"
+            else
+              # Last resort - try to find GTest files
+              GTEST_LIB=$(find /usr -name "libgtest.a" 2>/dev/null | head -1)
+              if [ -n "$GTEST_LIB" ]; then
+                GTEST_DIR=$(dirname "$GTEST_LIB")
+                GTEST_FLAGS="-I/usr/include/gtest -L$GTEST_DIR -lgtest -lgtest_main"
+              else
+                echo "ERROR: Could not find GTest libraries"
+                exit 1
+              fi
+            fi
+            
             echo "Using manual GTest linking: $GTEST_FLAGS"
           fi
           
