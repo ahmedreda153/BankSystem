@@ -104,27 +104,52 @@ jobs:
           echo "compiler=$COMPILER" >> $GITHUB_OUTPUT
           echo "Detected compiler: $COMPILER"
           
-          # Find source files (excluding test files and main files)
-          SOURCE_FILES=$(find . \
-            -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" \
+          # Find all C++ files first
+          echo "=== Finding all C++ files ==="
+          find . -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" \
             ! -path "*/build/*" ! -path "*/Build/*" ! -path "*/BUILD/*" \
-            ! -path "*/test/*" ! -path "*/tests/*" ! -path "*/Test/*" ! -path "*/Tests/*" \
-            ! -name "*test*" ! -name "*Test*" ! -name "*TEST*" \
-            ! -name "main.cpp" ! -name "main.cc" ! -name "main.cxx" \
-            | sort | uniq | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            | sort > /tmp/all_cpp_files.txt
+          
+          echo "All C++ files found:"
+          cat /tmp/all_cpp_files.txt
+          
+          # Find test files with more precise patterns
+          echo "=== Identifying test files ==="
+          grep -E "(test|Test|TEST)" /tmp/all_cpp_files.txt > /tmp/test_candidates.txt || touch /tmp/test_candidates.txt
+          
+          # Also check for files in test directories
+          find . -path "*/test*/*.cpp" -o -path "*/Test*/*.cpp" -o -path "*/tests/*.cpp" \
+            ! -path "*/build/*" ! -path "*/Build/*" ! -path "*/BUILD/*" \
+            >> /tmp/test_candidates.txt || true
+          
+          # Remove duplicates and create final test file list
+          sort /tmp/test_candidates.txt | uniq > /tmp/final_test_files.txt
+          TEST_FILES=$(cat /tmp/final_test_files.txt | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "test-files=$TEST_FILES" >> $GITHUB_OUTPUT
+          echo "Found test files: $TEST_FILES"
+          
+          # Find source files (everything that's not a test file or main file)
+          echo "=== Identifying source files ==="
+          # Start with all files, then exclude test files and main files
+          cp /tmp/all_cpp_files.txt /tmp/source_candidates.txt
+          
+          # Remove test files
+          if [ -s /tmp/final_test_files.txt ]; then
+            while IFS= read -r testfile; do
+              grep -v "^$testfile$" /tmp/source_candidates.txt > /tmp/temp_sources.txt || true
+              mv /tmp/temp_sources.txt /tmp/source_candidates.txt
+            done < /tmp/final_test_files.txt
+          fi
+          
+          # Remove main files
+          grep -v -E "(main\.cpp|main\.cc|main\.cxx)$" /tmp/source_candidates.txt > /tmp/final_source_files.txt || touch /tmp/final_source_files.txt
+          
+          SOURCE_FILES=$(cat /tmp/final_source_files.txt | jq -R -s -c 'split("\n") | map(select(length > 0))')
           echo "source-files=$SOURCE_FILES" >> $GITHUB_OUTPUT
           echo "Found source files: $SOURCE_FILES"
           
-          # Find test files (ensure uniqueness and exclude main functions)
-          TEST_FILES=$(find . \
-            -name "*test*.cpp" -o -name "*test*.cc" -o -name "*test*.cxx" \
-            -o -name "*Test*.cpp" -o -name "*Test*.cc" -o -name "*Test*.cxx" \
-            -o -name "*TEST*.cpp" -o -name "*TEST*.cc" -o -name "*TEST*.cxx" \
-            -o -path "*/test*/*.cpp" -o -path "*/Test*/*.cpp" \
-            ! -path "*/build/*" ! -path "*/Build/*" ! -path "*/BUILD/*" \
-            | sort | uniq | jq -R -s -c 'split("\n") | map(select(length > 0))')
-          echo "test-files=$TEST_FILES" >> $GITHUB_OUTPUT
-          echo "Found test files: $TEST_FILES"
+          # Clean up temp files
+          rm -f /tmp/all_cpp_files.txt /tmp/test_candidates.txt /tmp/final_test_files.txt /tmp/source_candidates.txt /tmp/final_source_files.txt /tmp/temp_sources.txt
           
           # Find include directories
           INCLUDE_DIRS=$(find . -type d \
@@ -297,25 +322,62 @@ jobs:
           echo "Include dirs: $INCLUDE_DIRS"
           echo "Has custom main: $HAS_CUSTOM_MAIN"
           
-          # Convert JSON arrays to space-separated strings and remove duplicates
-          SOURCE_LIST=$(echo "$SOURCE_FILES" | jq -r '.[] | select(length > 0)' | sort | uniq | tr '\n' ' ')
-          TEST_LIST=$(echo "$TEST_FILES" | jq -r '.[] | select(length > 0)' | sort | uniq | tr '\n' ' ')
+          # Create temporary files to handle deduplication properly
+          echo "$SOURCE_FILES" | jq -r '.[] | select(length > 0)' | sort | uniq > /tmp/source_files.txt
+          echo "$TEST_FILES" | jq -r '.[] | select(length > 0)' | sort | uniq > /tmp/test_files.txt
+          
+          # Debug: show what files we found
+          echo "=== Source files found ==="
+          cat /tmp/source_files.txt
+          echo "=== Test files found ==="
+          cat /tmp/test_files.txt
+          
+          # Convert to arrays for processing
+          SOURCE_LIST=$(cat /tmp/source_files.txt | tr '\n' ' ')
+          TEST_LIST=$(cat /tmp/test_files.txt | tr '\n' ' ')
           
           echo "Parsed source files: $SOURCE_LIST"
           echo "Parsed test files: $TEST_LIST"
           
-          if [ -z "$TEST_LIST" ]; then
+          # Ensure we have test files
+          if [ ! -s /tmp/test_files.txt ]; then
             echo "No test files found!"
             exit 1
           fi
           
-          # Remove any potential duplicates and main.cpp from source list
+          # Filter source files (remove main files and any files that appear in test list)
           FILTERED_SOURCES=""
           for src in $SOURCE_LIST; do
-            if [ -f "$src" ] && [[ "$src" != *"main.cpp"* ]] && [[ "$src" != *"main.cc"* ]] && [[ "$src" != *"main.cxx"* ]]; then
+            if [ -f "$src" ]; then
+              # Skip main files
+              if [[ "$src" == *"main.cpp"* ]] || [[ "$src" == *"main.cc"* ]] || [[ "$src" == *"main.cxx"* ]]; then
+                echo "Skipping main file: $src"
+                continue
+              fi
+              # Skip if this file is also in test list (to avoid duplication)
+              if grep -Fxq "$src" /tmp/test_files.txt; then
+                echo "Skipping duplicate file (found in test list): $src"
+                continue
+              fi
               FILTERED_SOURCES="$FILTERED_SOURCES $src"
             fi
           done
+          
+          # Ensure test files are unique and exist
+          FILTERED_TESTS=""
+          for test in $TEST_LIST; do
+            if [ -f "$test" ]; then
+              # Check if already added
+              if [[ "$FILTERED_TESTS" != *"$test"* ]]; then
+                FILTERED_TESTS="$FILTERED_TESTS $test"
+              else
+                echo "Skipping duplicate test file: $test"
+              fi
+            fi
+          done
+          
+          echo "Final filtered source files: $FILTERED_SOURCES"
+          echo "Final filtered test files: $FILTERED_TESTS"
           
           # Check if test files contain main function
           GTEST_MAIN_FLAG=""
@@ -343,8 +405,8 @@ jobs:
             echo "Using manual GTest linking: $GTEST_CFLAGS $GTEST_LIBS"
           fi
           
-          # Build command
-          BUILD_CMD="$CXX $COMPILER_FLAGS $INCLUDE_DIRS $GTEST_CFLAGS $FILTERED_SOURCES $TEST_LIST $GTEST_LIBS $GTEST_MAIN_FLAG $LINKER_FLAGS -o test_runner"
+          # Build command with proper file handling
+          BUILD_CMD="$CXX $COMPILER_FLAGS $INCLUDE_DIRS $GTEST_CFLAGS $FILTERED_SOURCES $FILTERED_TESTS $GTEST_LIBS $GTEST_MAIN_FLAG $LINKER_FLAGS -o test_runner"
           
           echo "Build command: $BUILD_CMD"
           
@@ -358,6 +420,9 @@ jobs:
           else
             echo "DIRECT_BUILD_SUCCESS=false" >> $GITHUB_ENV
           fi
+          
+          # Cleanup temp files
+          rm -f /tmp/source_files.txt /tmp/test_files.txt
 
       - name: Run Tests
         if: env.CMAKE_BUILD_SUCCESS == 'true' || env.DIRECT_BUILD_SUCCESS == 'true'
