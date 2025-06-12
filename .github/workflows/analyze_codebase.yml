@@ -25,7 +25,7 @@ jobs:
             BRANCH_NAME="${{ github.head_ref }}"
 
             response=$(curl -s -w "%{http_code}" -o response.txt -X POST "https://fastestai.tech/codebase/analyze" \
-              -H "Authorization: Bearer $FASTEST_SECRET_KEY" \
+              -H "X-Secret-Key: $FASTEST_SECRET_KEY" \
               -H "Content-Type: application/json" \
               -d '{
                   "base_commit": "'$BASE_COMMIT'",
