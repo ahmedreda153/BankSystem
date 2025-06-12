@@ -18,10 +18,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up build environment
+      - name: Set up C++ toolchain
+        uses: aminya/setup-cpp@v1
+        with:
+          compiler: clang++
+          cmake: true
+
+      - name: Install GTest and dependencies
         run: |
+          set -e
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libgtest-dev jq
+          sudo apt-get install -y libgtest-dev jq
           cd /usr/src/googletest
           sudo mkdir -p build
           cd build
@@ -31,35 +38,59 @@ jobs:
 
       - name: Debug environment
         run: |
+          set -e
           ls -la
           ls -l /usr/lib/libgtest* || echo "GTest libraries not found in /usr/lib"
           ls -l /usr/include/gtest || echo "GTest headers not found"
 
       - name: Compile application code
         run: |
+          set -e
           clang++ -std=c++14 -c BankApp.cpp -o BankApp.o -v
         shell: bash
 
       - name: Compile and link tests
         run: |
+          set -e
           clang++ -std=c++14 -I/usr/include/gtest test.cpp BankApp.o -L/usr/lib -lgtest -lgtest_main -pthread -o test_executable -v
         shell: bash
 
       - name: Run specific tests
         run: |
+          set -e
           TEST_FILTER=$(echo '${{ github.event.inputs.test_names }}' | jq -r 'join(":")')
-          if [ -z "$TEST_FILTER" ] || [ "$TEST_FILTER" = "[]" ]; then
+          if [ -z "$TEST_FILTER" ]; then
             echo "No specific tests provided, running all tests"
-            ./test_executable  --gtest_output=xml:test_results.xml
+            ./test_executable --gtest_output=xml:test_results.xml
           else
             echo "Running tests: $TEST_FILTER"
             ./test_executable --gtest_filter="$TEST_FILTER" --gtest_output=xml:test_results.xml
           fi
         shell: bash
 
+      - name: Upload test results as artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: gtest-results
+          path: test_results.xml
+
       - name: Send test results to server
+        env:
+            FASTEST_SECRET_KEY: ${{ secrets.FASTEST_SECRET_KEY }}
         run: |
-          curl -X POST "https://f07e-196-221-51-214.ngrok-free.app/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}" \
+          set -e
+          STATUS_CODE=$(curl -s -o response.txt -w "%{http_code}" -X POST "https://fastestai.tech/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}" \
+            -H "Authorization: Bearer $FASTEST_SECRET_KEY" \
             -H "Content-Type: application/xml" \
-            --data-binary "@test_results.xml"
+            --data-binary "@test_results.xml")
+          if [ "$STATUS_CODE" -ne 200 ]; then
+            echo "Failed to send test results! Status code: $STATUS_CODE"
+            cat response.txt
+            echo "Test results XML:"
+            cat test_results.xml
+            exit 1
+          else
+            echo "Test results sent successfully. Status code: $STATUS_CODE"
+          fi
         shell: bash
