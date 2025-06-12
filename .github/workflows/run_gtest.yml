@@ -298,18 +298,23 @@ jobs:
           mkdir -p build
           cd build
           cmake .. -DCMAKE_BUILD_TYPE=Debug
-          make -j$(nproc)
+          make -j$(nproc) VERBOSE=1
           
-          # Check if executable was created
+          # Check if executable was created and verify it
           if [ -f "test_runner" ]; then
             echo "CMAKE_BUILD_SUCCESS=true" >> $GITHUB_ENV
-            echo "TEST_EXECUTABLE=build/test_runner" >> $GITHUB_ENV
+            echo "TEST_EXECUTABLE=$(pwd)/test_runner" >> $GITHUB_ENV
+            echo "CMake build successful, executable created at: $(pwd)/test_runner"
+            file test_runner
+            chmod +x test_runner
           else
             echo "CMAKE_BUILD_SUCCESS=false" >> $GITHUB_ENV
+            echo "CMake build failed - no executable created"
+            ls -la .
           fi
 
       - name: Build with Direct Compilation  
-        if: matrix.approach == 'direct' && (env.CMAKE_BUILD_SUCCESS != 'true' || needs.analyze-project.outputs.build-system == 'direct')
+        if: matrix.approach == 'direct'
         run: |
           set -e
           
@@ -327,146 +332,142 @@ jobs:
           echo "Include dirs: $INCLUDE_DIRS"
           echo "Has custom main: $HAS_CUSTOM_MAIN"
           
-          # Create temporary files to handle deduplication properly
-          echo "$SOURCE_FILES" | jq -r '.[] | select(length > 0)' | sort | uniq > /tmp/source_files.txt
-          echo "$TEST_FILES" | jq -r '.[] | select(length > 0)' | sort | uniq > /tmp/test_files.txt
-          
-          # Debug: show what files we found
-          echo "=== Source files found ==="
-          cat /tmp/source_files.txt
-          echo "=== Test files found ==="
-          cat /tmp/test_files.txt
-          
-          # Convert to arrays for processing
-          SOURCE_LIST=$(cat /tmp/source_files.txt | tr '\n' ' ')
-          TEST_LIST=$(cat /tmp/test_files.txt | tr '\n' ' ')
-          
-          echo "Parsed source files: $SOURCE_LIST"
-          echo "Parsed test files: $TEST_LIST"
-          
-          # Ensure we have test files
-          if [ ! -s /tmp/test_files.txt ]; then
-            echo "No test files found!"
+          # Validate we have test files
+          if [ "$TEST_FILES" = "[]" ] || [ -z "$TEST_FILES" ]; then
+            echo "❌ No test files found for compilation"
+            echo "DIRECT_BUILD_SUCCESS=false" >> $GITHUB_ENV
             exit 1
           fi
           
-          # Filter source files (remove main files and any files that appear in test list)
-          FILTERED_SOURCES=""
-          for src in $SOURCE_LIST; do
-            if [ -f "$src" ]; then
-              # Skip main files
-              if [[ "$src" == *"main.cpp"* ]] || [[ "$src" == *"main.cc"* ]] || [[ "$src" == *"main.cxx"* ]]; then
-                echo "Skipping main file: $src"
-                continue
-              fi
-              # Skip if this file is also in test list (to avoid duplication)
-              if grep -Fxq "$src" /tmp/test_files.txt; then
-                echo "Skipping duplicate file (found in test list): $src"
-                continue
-              fi
-              FILTERED_SOURCES="$FILTERED_SOURCES $src"
-            fi
-          done
+          # Create temporary files to handle file lists
+          echo "$SOURCE_FILES" | jq -r '.[] | select(length > 0)' > /tmp/source_files.txt
+          echo "$TEST_FILES" | jq -r '.[] | select(length > 0)' > /tmp/test_files.txt
           
-          # Ensure test files are unique and exist
-          FILTERED_TESTS=""
-          for test in $TEST_LIST; do
-            if [ -f "$test" ]; then
-              # Check if already added
-              if [[ "$FILTERED_TESTS" != *"$test"* ]]; then
-                FILTERED_TESTS="$FILTERED_TESTS $test"
-              else
-                echo "Skipping duplicate test file: $test"
+          # Debug: show what files we found
+          echo "=== Source files found ==="
+          cat /tmp/source_files.txt || echo "No source files"
+          echo "=== Test files found ==="
+          cat /tmp/test_files.txt || echo "No test files"
+          
+          # Verify test files exist
+          if [ ! -s /tmp/test_files.txt ]; then
+            echo "❌ No test files found after parsing!"
+            echo "DIRECT_BUILD_SUCCESS=false" >> $GITHUB_ENV
+            exit 1
+          fi
+          
+          # Build file lists, ensuring files exist
+          FILTERED_SOURCES=""
+          while IFS= read -r src; do
+            if [ -f "$src" ] && [[ "$src" != *"main.cpp"* ]] && [[ "$src" != *"main.cc"* ]] && [[ "$src" != *"main.cxx"* ]]; then
+              # Skip if this file is also in test list
+              if ! grep -Fxq "$src" /tmp/test_files.txt; then
+                FILTERED_SOURCES="$FILTERED_SOURCES $src"
               fi
             fi
-          done
+          done < /tmp/source_files.txt
+          
+          FILTERED_TESTS=""
+          while IFS= read -r test; do
+            if [ -f "$test" ]; then
+              FILTERED_TESTS="$FILTERED_TESTS $test"
+            else
+              echo "⚠️ Test file not found: $test"
+            fi
+          done < /tmp/test_files.txt
           
           echo "Final filtered source files: $FILTERED_SOURCES"
           echo "Final filtered test files: $FILTERED_TESTS"
           
-          # Check if test files contain main function
+          # Validate we still have test files
+          if [ -z "$FILTERED_TESTS" ]; then
+            echo "❌ No valid test files found!"
+            echo "DIRECT_BUILD_SUCCESS=false" >> $GITHUB_ENV
+            exit 1
+          fi
+          
+          # Determine GTest linking
           GTEST_MAIN_FLAG=""
           if [ "$HAS_CUSTOM_MAIN" = "true" ]; then
             echo "Test files contain custom main function"
-            GTEST_MAIN_FLAG=""
           else
             echo "Using GTest main function"
             GTEST_MAIN_FLAG="-lgtest_main"
           fi
           
-          # Conservative compiler flags to avoid illegal instruction errors
-          COMPILER_FLAGS="-std=$CPP_STANDARD -Wall -g -march=x86-64 -mtune=generic -O1 -fno-strict-aliasing"
+          # Conservative compiler flags
+          COMPILER_FLAGS="-std=$CPP_STANDARD -Wall -g -march=x86-64 -mtune=generic -O1"
           LINKER_FLAGS="-pthread"
           
-          # Try to link with GTest using pkg-config first
+          # Setup GTest linking
           if pkg-config --exists gtest; then
             GTEST_CFLAGS=$(pkg-config --cflags gtest)
             GTEST_LIBS=$(pkg-config --libs gtest)
-            echo "Using pkg-config for GTest: $GTEST_CFLAGS $GTEST_LIBS"
           else
-            # Fallback to manual GTest linking
             GTEST_CFLAGS="-I/usr/include/gtest"
             GTEST_LIBS="-L/usr/lib -L/usr/local/lib -lgtest"
-            echo "Using manual GTest linking: $GTEST_CFLAGS $GTEST_LIBS"
           fi
           
-          # Build command with proper file handling
+          # Build command
           BUILD_CMD="$CXX $COMPILER_FLAGS $INCLUDE_DIRS $GTEST_CFLAGS $FILTERED_SOURCES $FILTERED_TESTS $GTEST_LIBS $GTEST_MAIN_FLAG $LINKER_FLAGS -o test_runner"
           
           echo "Build command: $BUILD_CMD"
           
-          # Execute build
-          eval $BUILD_CMD
-          
-          if [ -f "test_runner" ]; then
-            echo "DIRECT_BUILD_SUCCESS=true" >> $GITHUB_ENV
-            echo "TEST_EXECUTABLE=test_runner" >> $GITHUB_ENV
-            chmod +x test_runner
-            
-            # Verify the binary
-            echo "=== Binary Information ==="
-            file test_runner
-            ldd test_runner || echo "Could not check dependencies"
+          # Execute build with error checking
+          if eval $BUILD_CMD; then
+            if [ -f "test_runner" ]; then
+              echo "DIRECT_BUILD_SUCCESS=true" >> $GITHUB_ENV
+              echo "TEST_EXECUTABLE=$(pwd)/test_runner" >> $GITHUB_ENV
+              chmod +x test_runner
+              echo "Direct build successful, executable created at: $(pwd)/test_runner"
+              file test_runner
+            else
+              echo "❌ Build completed but no executable found"
+              echo "DIRECT_BUILD_SUCCESS=false" >> $GITHUB_ENV
+            fi
           else
+            echo "❌ Build command failed"
             echo "DIRECT_BUILD_SUCCESS=false" >> $GITHUB_ENV
           fi
           
-          # Cleanup temp files
+          # Cleanup
           rm -f /tmp/source_files.txt /tmp/test_files.txt
 
-      - name: Debug Binary
+      - name: Verify Executable
         if: env.CMAKE_BUILD_SUCCESS == 'true' || env.DIRECT_BUILD_SUCCESS == 'true'
         run: |
           set -e
           
-          TEST_EXECUTABLE="${TEST_EXECUTABLE:-test_runner}"
+          TEST_EXECUTABLE="${TEST_EXECUTABLE}"
           
-          if [ ! -f "$TEST_EXECUTABLE" ]; then
-            echo "Test executable not found: $TEST_EXECUTABLE"
+          if [ -z "$TEST_EXECUTABLE" ] || [ ! -f "$TEST_EXECUTABLE" ]; then
+            echo "❌ Test executable not found: $TEST_EXECUTABLE"
+            echo "Current directory contents:"
+            ls -la .
+            if [ -d "build" ]; then
+              echo "Build directory contents:"
+              ls -la build/
+            fi
             exit 1
           fi
           
-          echo "=== Binary Debug Information ==="
+          echo "✅ Test executable found: $TEST_EXECUTABLE"
+          echo "=== Binary Information ==="
           file "$TEST_EXECUTABLE"
-          echo ""
-          echo "=== CPU Information ==="
-          cat /proc/cpuinfo | grep -E "model name|flags" | head -2
-          echo ""
           echo "=== Library Dependencies ==="
           ldd "$TEST_EXECUTABLE" || echo "Could not check dependencies"
-          echo ""
-          echo "=== Testing Basic Execution ==="
-          timeout 10s "$TEST_EXECUTABLE" --help || echo "Help command failed or timed out"
+          echo "=== Testing Help Command ==="
+          timeout 10s "$TEST_EXECUTABLE" --help 2>&1 || echo "Help command failed or timed out (exit code: $?)"
 
       - name: Run Tests
         if: env.CMAKE_BUILD_SUCCESS == 'true' || env.DIRECT_BUILD_SUCCESS == 'true'
         run: |
           set -e
           
-          TEST_EXECUTABLE="${TEST_EXECUTABLE:-test_runner}"
+          TEST_EXECUTABLE="${TEST_EXECUTABLE}"
           
           if [ ! -f "$TEST_EXECUTABLE" ]; then
-            echo "Test executable not found: $TEST_EXECUTABLE"
+            echo "❌ Test executable not found: $TEST_EXECUTABLE"
             exit 1
           fi
           
@@ -476,112 +477,74 @@ jobs:
           # Prepare output file name
           OUTPUT_FILE="${{ matrix.approach }}_results.xml"
           
-          # List available tests first with timeout and error handling
-          echo "=== Available Tests ==="
-          timeout 30s "$TEST_EXECUTABLE" --gtest_list_tests || {
-            echo "Warning: Could not list tests (exit code: $?)"
-            echo "Attempting to run tests anyway..."
-          }
+          # List available tests first
+          echo "=== Listing Available Tests ==="
+          if timeout 30s "$TEST_EXECUTABLE" --gtest_list_tests 2>&1; then
+            echo "✅ Test listing successful"
+          else
+            echo "⚠️ Could not list tests (exit code: $?), but continuing..."
+          fi
           
-          # Run tests with timeout and better error handling
+          # Run tests
           echo "=== Running Tests ==="
           
           if [ -n "$TEST_FILTER" ]; then
             echo "Running filtered tests: $TEST_FILTER"
-            timeout 300s "$TEST_EXECUTABLE" --gtest_filter="$TEST_FILTER" --gtest_output=xml:"$OUTPUT_FILE" || {
-              EXIT_CODE=$?
-              echo "Test execution failed with exit code: $EXIT_CODE"
-              
-              # Try to run with gdb to get more information about crashes
-              if [ $EXIT_CODE -eq 132 ] || [ $EXIT_CODE -eq 139 ]; then
-                echo "=== Crash detected, attempting to get stack trace ==="
-                echo "run --gtest_filter=\"$TEST_FILTER\" --gtest_output=xml:$OUTPUT_FILE" > gdb_commands.txt
-                echo "bt" >> gdb_commands.txt
-                echo "quit" >> gdb_commands.txt
-                timeout 60s gdb -batch -x gdb_commands.txt "$TEST_EXECUTABLE" || echo "Could not get stack trace"
-              fi
-              
-              # Check if partial results were generated
-              if [ -f "$OUTPUT_FILE" ]; then
-                echo "Partial test results were generated"
-              else
-                # Create a minimal error report
-                cat > "$OUTPUT_FILE" << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <testsuites tests="0" failures="1" disabled="0" errors="1" timestamp="$(date -u +%Y-%m-%dT%H:%M:%S)" time="0" name="AllTests">
-            <testsuite name="TestExecutionError" tests="0" failures="1" disabled="0" errors="1" time="0">
-              <testcase name="ExecutionFailed" status="run" time="0" classname="TestExecutionError">
-                <error message="Test executable crashed or failed to run" type="RuntimeError">
-                  Exit code: $EXIT_CODE
-                  This may be due to:
-                  - Illegal instruction (incompatible CPU features)
-                  - Memory access violation
-                  - Missing dependencies
-                  - Compilation issues
-                </error>
-              </testcase>
-            </testsuite>
-          </testsuites>
-          EOF
-              fi
-            }
+            TEST_CMD="$TEST_EXECUTABLE --gtest_filter=\"$TEST_FILTER\" --gtest_output=xml:$OUTPUT_FILE"
           else
             echo "Running all tests"
-            timeout 300s "$TEST_EXECUTABLE" --gtest_output=xml:"$OUTPUT_FILE" || {
-              EXIT_CODE=$?
-              echo "Test execution failed with exit code: $EXIT_CODE"
-              
-              # Try to run with gdb to get more information about crashes
-              if [ $EXIT_CODE -eq 132 ] || [ $EXIT_CODE -eq 139 ]; then
-                echo "=== Crash detected, attempting to get stack trace ==="
-                echo "run --gtest_output=xml:$OUTPUT_FILE" > gdb_commands.txt
-                echo "bt" >> gdb_commands.txt
-                echo "quit" >> gdb_commands.txt
-                timeout 60s gdb -batch -x gdb_commands.txt "$TEST_EXECUTABLE" || echo "Could not get stack trace"
-              fi
-              
-              # Check if partial results were generated
-              if [ -f "$OUTPUT_FILE" ]; then
-                echo "Partial test results were generated"
-              else
-                # Create a minimal error report
-                cat > "$OUTPUT_FILE" << EOF
+            TEST_CMD="$TEST_EXECUTABLE --gtest_output=xml:$OUTPUT_FILE"
+          fi
+          
+          echo "Test command: $TEST_CMD"
+          
+          # Run with timeout and capture exit code
+          if timeout 300s bash -c "$TEST_CMD"; then
+            echo "✅ Tests completed successfully"
+          else
+            EXIT_CODE=$?
+            echo "⚠️ Tests completed with exit code: $EXIT_CODE"
+            
+            # Check if partial results were generated
+            if [ ! -f "$OUTPUT_FILE" ]; then
+              echo "No results file generated, creating error report..."
+              cat > "$OUTPUT_FILE" << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <testsuites tests="0" failures="1" disabled="0" errors="1" timestamp="$(date -u +%Y-%m-%dT%H:%M:%S)" time="0" name="AllTests">
             <testsuite name="TestExecutionError" tests="0" failures="1" disabled="0" errors="1" time="0">
               <testcase name="ExecutionFailed" status="run" time="0" classname="TestExecutionError">
-                <error message="Test executable crashed or failed to run" type="RuntimeError">
+                <error message="Test executable failed to run or crashed" type="RuntimeError">
                   Exit code: $EXIT_CODE
-                  This may be due to:
-                  - Illegal instruction (incompatible CPU features)
-                  - Memory access violation
-                  - Missing dependencies
-                  - Compilation issues
+                  Command: $TEST_CMD
+                  This may be due to test failures, crashes, or timeout.
                 </error>
               </testcase>
             </testsuite>
           </testsuites>
           EOF
-              fi
-            }
+            fi
           fi
           
-          # Verify results file
+          # Verify and process results file
           if [ -f "$OUTPUT_FILE" ]; then
             echo "TEST_RESULTS_FILE=$OUTPUT_FILE" >> $GITHUB_ENV
-            echo "Test results file generated"
+            echo "✅ Test results file generated: $OUTPUT_FILE"
             
             # Show summary
             echo "=== Test Summary ==="
-            grep -o 'tests="[0-9]*"' "$OUTPUT_FILE" || echo "Could not parse test count"
-            grep -o 'failures="[0-9]*"' "$OUTPUT_FILE" || echo "Could not parse failure count"
-            grep -o 'errors="[0-9]*"' "$OUTPUT_FILE" || echo "Could not parse error count"
+            if grep -q "testsuites" "$OUTPUT_FILE"; then
+              echo "Tests: $(grep -o 'tests="[0-9]*"' "$OUTPUT_FILE" | head -1 | cut -d'"' -f2)"
+              echo "Failures: $(grep -o 'failures="[0-9]*"' "$OUTPUT_FILE" | head -1 | cut -d'"' -f2)"
+              echo "Errors: $(grep -o 'errors="[0-9]*"' "$OUTPUT_FILE" | head -1 | cut -d'"' -f2)"
+            else
+              echo "Could not parse test summary from results file"
+            fi
             
             # Show first few lines of results for debugging
-            echo "=== Results File Content (first 20 lines) ==="
-            head -20 "$OUTPUT_FILE"
+            echo "=== Results File Preview ==="
+            head -10 "$OUTPUT_FILE"
           else
-            echo "Test results file was not generated!"
+            echo "❌ Test results file was not generated!"
             exit 1
           fi
 
@@ -599,13 +562,12 @@ jobs:
             exit 1
           fi
           
-          # Validate results file is not empty and is valid XML
+          # Validate results file
           if [ ! -s "$RESULTS_FILE" ]; then
             echo "❌ Results file is empty: $RESULTS_FILE"
             exit 1
           fi
           
-          # Check if file contains basic XML structure
           if ! grep -q "<?xml" "$RESULTS_FILE"; then
             echo "❌ Results file does not appear to be valid XML"
             echo "File content preview:"
@@ -618,107 +580,52 @@ jobs:
           echo "Build Approach: ${{ matrix.approach }}"
           echo "Results file size: $(wc -c < "$RESULTS_FILE") bytes"
           
-          # Send to FastestAI with retries
-          MAX_RETRIES=3
-          RETRY_COUNT=0
-          SUCCESS=false
+          # Send to FastestAI (single attempt)
+          response_code=$(curl -s -o response.txt -w "%{http_code}" -X POST \
+            "https://fastestai.tech/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}&build_approach=${{ matrix.approach }}" \
+            -H "X-Secret-Key: $FASTEST_SECRET_KEY" \
+            -H "Content-Type: application/xml" \
+            -H "User-Agent: FastestAI-GitHub-Runner/1.0" \
+            --connect-timeout 30 \
+            --max-time 120 \
+            --data-binary "@$RESULTS_FILE")
           
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$SUCCESS" = "false" ]; do
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-            echo "Attempt $RETRY_COUNT of $MAX_RETRIES..."
-            
-            # Make the API call
-            response_code=$(curl -s -o response.txt -w "%{http_code}" -X POST \
-              "https://fastestai.tech/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}&build_approach=${{ matrix.approach }}" \
-              -H "X-Secret-Key: $FASTEST_SECRET_KEY" \
-              -H "Content-Type: application/xml" \
-              -H "User-Agent: FastestAI-GitHub-Runner/1.0" \
-              --connect-timeout 30 \
-              --max-time 120 \
-              --data-binary "@$RESULTS_FILE")
-            
-            echo "Response code: $response_code"
-            
-            if [ "$response_code" -eq 200 ]; then
-              echo "✅ Test results sent successfully to FastestAI (approach: ${{ matrix.approach }})"
-              if [ -f "response.txt" ]; then
-                echo "API Response: $(cat response.txt)"
-              fi
-              SUCCESS=true
-            elif [ "$response_code" -eq 201 ]; then
-              echo "✅ Test results created successfully in FastestAI (approach: ${{ matrix.approach }})"
-              if [ -f "response.txt" ]; then
-                echo "API Response: $(cat response.txt)"
-              fi
-              SUCCESS=true
-            else
-              echo "❌ Failed to send results. HTTP Status: $response_code"
-              if [ -f "response.txt" ]; then
-                echo "API Response: $(cat response.txt)"
-              fi
-              
-              # Check for specific error conditions
-              case $response_code in
-                400)
-                  echo "❌ Bad Request: Check if analysis_result_id is valid and request format is correct"
-                  break  # Don't retry on client errors
-                  ;;
-                401)
-                  echo "❌ Unauthorized: Check if FASTEST_SECRET_KEY is set correctly"
-                  break  # Don't retry on auth errors
-                  ;;
-                403)
-                  echo "❌ Forbidden: API key may not have permission for this operation"
-                  break  # Don't retry on permission errors
-                  ;;
-                404)
-                  echo "❌ Not Found: Analysis result ID may not exist"
-                  break  # Don't retry on not found errors
-                  ;;
-                429)
-                  echo "⚠️ Rate limited: Waiting before retry..."
-                  sleep $((RETRY_COUNT * 5))  # Exponential backoff
-                  ;;
-                500|502|503|504)
-                  echo "⚠️ Server error: Will retry after delay..."
-                  if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                    sleep $((RETRY_COUNT * 2))  # Progressive delay
-                  fi
-                  ;;
-                *)
-                  echo "❌ Unexpected HTTP status code: $response_code"
-                  if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                    sleep 2
-                  fi
-                  ;;
-              esac
+          echo "Response code: $response_code"
+          
+          if [ "$response_code" -eq 200 ] || [ "$response_code" -eq 201 ]; then
+            echo "✅ Test results sent successfully to FastestAI (approach: ${{ matrix.approach }})"
+            if [ -f "response.txt" ]; then
+              echo "API Response: $(cat response.txt)"
             fi
-          done
-          
-          # Final success check
-          if [ "$SUCCESS" = "true" ]; then
-            echo "🎉 Results successfully delivered to FastestAI!"
-            exit 0
           else
-            echo "❌ Failed to send results after $MAX_RETRIES attempts"
-            echo "This indicates either:"
-            echo "  - Server issues on FastestAI side"
-            echo "  - Network connectivity problems" 
-            echo "  - Invalid API credentials"
-            echo "  - Malformed request data"
-            echo ""
-            echo "Debug information:"
-            echo "  - Analysis Result ID: ${{ github.event.inputs.analysis_result_id }}"
-            echo "  - Build Approach: ${{ matrix.approach }}"
-            echo "  - Secret Key Length: ${#FASTEST_SECRET_KEY}"
-            echo "  - Results File Size: $(wc -c < "$RESULTS_FILE") bytes"
+            echo "❌ Failed to send results. HTTP Status: $response_code"
+            if [ -f "response.txt" ]; then
+              echo "API Response: $(cat response.txt)"
+            fi
             
-            # Show the results file structure for debugging
-            echo ""
-            echo "Results file structure:"
-            head -5 "$RESULTS_FILE"
-            echo "..."
-            tail -5 "$RESULTS_FILE"
+            case $response_code in
+              400)
+                echo "❌ Bad Request: Check if analysis_result_id is valid and request format is correct"
+                ;;
+              401)
+                echo "❌ Unauthorized: Check if FASTEST_SECRET_KEY is set correctly"
+                ;;
+              403)
+                echo "❌ Forbidden: API key may not have permission for this operation"
+                ;;
+              404)
+                echo "❌ Not Found: Analysis result ID may not exist"
+                ;;
+              429)
+                echo "❌ Rate limited: Too many requests"
+                ;;
+              500|502|503|504)
+                echo "❌ Server error: FastestAI service temporarily unavailable"
+                ;;
+              *)
+                echo "❌ Unexpected HTTP status code: $response_code"
+                ;;
+            esac
             
             exit 1
           fi
