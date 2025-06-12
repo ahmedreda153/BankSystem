@@ -595,27 +595,132 @@ jobs:
           RESULTS_FILE="${TEST_RESULTS_FILE}"
           
           if [ ! -f "$RESULTS_FILE" ]; then
-            echo "Results file not found: $RESULTS_FILE"
+            echo "❌ Results file not found: $RESULTS_FILE"
             exit 1
           fi
           
-          # Send to FastestAI
-          response_code=$(curl -s -o response.txt -w "%{http_code}" -X POST \
-            "https://fastestai.tech/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}&build_approach=${{ matrix.approach }}" \
-            -H "X-Secret-Key: $FASTEST_SECRET_KEY" \
-            -H "Content-Type: application/xml" \
-            --data-binary "@$RESULTS_FILE")
+          # Validate results file is not empty and is valid XML
+          if [ ! -s "$RESULTS_FILE" ]; then
+            echo "❌ Results file is empty: $RESULTS_FILE"
+            exit 1
+          fi
           
-          if [ "$response_code" -eq 200 ]; then
-            echo "✅ Test results sent successfully to FastestAI (approach: ${{ matrix.approach }})"
-            echo "Response: $(cat response.txt)"
+          # Check if file contains basic XML structure
+          if ! grep -q "<?xml" "$RESULTS_FILE"; then
+            echo "❌ Results file does not appear to be valid XML"
+            echo "File content preview:"
+            head -10 "$RESULTS_FILE"
+            exit 1
+          fi
+          
+          echo "📤 Sending test results to FastestAI..."
+          echo "Analysis Result ID: ${{ github.event.inputs.analysis_result_id }}"
+          echo "Build Approach: ${{ matrix.approach }}"
+          echo "Results file size: $(wc -c < "$RESULTS_FILE") bytes"
+          
+          # Send to FastestAI with retries
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          SUCCESS=false
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$SUCCESS" = "false" ]; do
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Attempt $RETRY_COUNT of $MAX_RETRIES..."
+            
+            # Make the API call
+            response_code=$(curl -s -o response.txt -w "%{http_code}" -X POST \
+              "https://fastestai.tech/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}&build_approach=${{ matrix.approach }}" \
+              -H "X-Secret-Key: $FASTEST_SECRET_KEY" \
+              -H "Content-Type: application/xml" \
+              -H "User-Agent: FastestAI-GitHub-Runner/1.0" \
+              --connect-timeout 30 \
+              --max-time 120 \
+              --data-binary "@$RESULTS_FILE")
+            
+            echo "Response code: $response_code"
+            
+            if [ "$response_code" -eq 200 ]; then
+              echo "✅ Test results sent successfully to FastestAI (approach: ${{ matrix.approach }})"
+              if [ -f "response.txt" ]; then
+                echo "API Response: $(cat response.txt)"
+              fi
+              SUCCESS=true
+            elif [ "$response_code" -eq 201 ]; then
+              echo "✅ Test results created successfully in FastestAI (approach: ${{ matrix.approach }})"
+              if [ -f "response.txt" ]; then
+                echo "API Response: $(cat response.txt)"
+              fi
+              SUCCESS=true
+            else
+              echo "❌ Failed to send results. HTTP Status: $response_code"
+              if [ -f "response.txt" ]; then
+                echo "API Response: $(cat response.txt)"
+              fi
+              
+              # Check for specific error conditions
+              case $response_code in
+                400)
+                  echo "❌ Bad Request: Check if analysis_result_id is valid and request format is correct"
+                  break  # Don't retry on client errors
+                  ;;
+                401)
+                  echo "❌ Unauthorized: Check if FASTEST_SECRET_KEY is set correctly"
+                  break  # Don't retry on auth errors
+                  ;;
+                403)
+                  echo "❌ Forbidden: API key may not have permission for this operation"
+                  break  # Don't retry on permission errors
+                  ;;
+                404)
+                  echo "❌ Not Found: Analysis result ID may not exist"
+                  break  # Don't retry on not found errors
+                  ;;
+                429)
+                  echo "⚠️ Rate limited: Waiting before retry..."
+                  sleep $((RETRY_COUNT * 5))  # Exponential backoff
+                  ;;
+                500|502|503|504)
+                  echo "⚠️ Server error: Will retry after delay..."
+                  if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                    sleep $((RETRY_COUNT * 2))  # Progressive delay
+                  fi
+                  ;;
+                *)
+                  echo "❌ Unexpected HTTP status code: $response_code"
+                  if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                    sleep 2
+                  fi
+                  ;;
+              esac
+            fi
+          done
+          
+          # Final success check
+          if [ "$SUCCESS" = "true" ]; then
+            echo "🎉 Results successfully delivered to FastestAI!"
             exit 0
           else
-            echo "❌ Failed to send results. Status: $response_code"
-            echo "Response: $(cat response.txt)"
+            echo "❌ Failed to send results after $MAX_RETRIES attempts"
+            echo "This indicates either:"
+            echo "  - Server issues on FastestAI side"
+            echo "  - Network connectivity problems" 
+            echo "  - Invalid API credentials"
+            echo "  - Malformed request data"
+            echo ""
+            echo "Debug information:"
+            echo "  - Analysis Result ID: ${{ github.event.inputs.analysis_result_id }}"
+            echo "  - Build Approach: ${{ matrix.approach }}"
+            echo "  - Secret Key Length: ${#FASTEST_SECRET_KEY}"
+            echo "  - Results File Size: $(wc -c < "$RESULTS_FILE") bytes"
             
-            # Don't fail the job, just log the error
-            echo "::warning::Failed to send results to FastestAI, but tests completed successfully"
+            # Show the results file structure for debugging
+            echo ""
+            echo "Results file structure:"
+            head -5 "$RESULTS_FILE"
+            echo "..."
+            tail -5 "$RESULTS_FILE"
+            
+            exit 1
           fi
 
   report:
