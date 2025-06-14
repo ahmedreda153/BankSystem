@@ -9,10 +9,11 @@
 
 using namespace std;
 
-class SavingsBankAcc: public BankAcc
+class SavingsBankAcc : public BankAcc
 {
 private:
     double minimumBalance;
+    double interestRate;
 
 public:
     SavingsBankAcc();
@@ -21,6 +22,9 @@ public:
     bool setBalance(double bal);
     bool withdraw(double amount);
     bool deposit(double amount);
+    void setInterestRate(double rate);
+    double getInterestRate() const;
+    double calculateInterest(int months) const;
 };
 
 #endif
