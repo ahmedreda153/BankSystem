@@ -11,12 +11,14 @@ using namespace std;
 BankAcc::BankAcc()
 {
     balance = 0;
+    feeHistory.clear();
 }
 
 BankAcc::BankAcc(double bal)
 {
     // balance
     balance = bal;
+    feeHistory.clear();
 }
 
 void BankAcc::setAccountID(string ID)
@@ -26,7 +28,8 @@ void BankAcc::setAccountID(string ID)
 
 bool BankAcc::setBalance(double bal)
 {
-    if (bal >= 0)
+    // Added a minimum balance requirement of 10
+    if (bal >= 10)
     {
         balance = bal;
         return true;
@@ -69,9 +72,12 @@ Client *BankAcc::getClient()
 
 bool BankAcc::withdraw(double amount)
 {
+    // Added a service fee of 5 for each withdrawal
     if (amount <= balance && amount > 0)
     {
-        balance -= amount;
+        double fee = 5.0;
+        balance -= (amount + fee); // 5 is the service fee
+        feeHistory.push_back(fee);
         return true;
     }
     else
@@ -96,6 +102,7 @@ bool BankAcc::deposit(double amount)
 SavingsBankAcc::SavingsBankAcc()
 {
     minimumBalance = 1000;
+    interestRate = 0.03; // Default interest rate of 3%
 }
 
 double SavingsBankAcc::setMinimumBalance(double min)
@@ -138,9 +145,39 @@ bool SavingsBankAcc::deposit(double amount)
 {
     if (amount >= 100)
     {
-        balance += amount;
+        // Adding interest bonus of 2% for each deposit
+        double bonus = amount * 0.02;
+        balance += (amount + bonus);
         return true;
     }
+    return false;
+}
+
+void SavingsBankAcc::setInterestRate(double rate)
+{
+    if (rate >= 0 && rate <= 0.1) // Limit interest rate to between 0% and 10%
+    {
+        interestRate = rate;
+    }
+    else
+    {
+        interestRate = 0.03; // Default to 3%
+    }
+}
+
+double SavingsBankAcc::getInterestRate() const
+{
+    return interestRate;
+}
+
+double SavingsBankAcc::calculateInterest(int months) const
+{
+    // Simple interest calculation: principal * rate * time
+    if (months > 0)
+    {
+        return balance * interestRate * (months / 12.0);
+    }
+    return 0.0;
 }
 
 Client::Client()
@@ -374,4 +411,25 @@ void BankApp::run()
             break;
         }
     } while (choice == 1 || choice == 2 || choice == 3 || choice == 4);
+}
+
+bool BankAcc::transferFunds(BankAcc &destinationAccount, double amount)
+{
+    if (amount > 0 && amount <= balance)
+    {
+        // Apply a transfer fee of 2
+        double fee = 2.0;
+        if (withdraw(amount))
+        {
+            destinationAccount.deposit(amount);
+            feeHistory.push_back(fee);
+            return true;
+        }
+    }
+    return false;
+}
+
+vector<double> BankAcc::getFeeHistory() const
+{
+    return feeHistory;
 }

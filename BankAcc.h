@@ -6,6 +6,7 @@
 #include "Client.h"
 #include <iostream>
 #include <string>
+#include <vector>
 
 using namespace std;
 
@@ -18,6 +19,7 @@ protected:
     double balance;
     string type;
     Client *bankClient;
+    vector<double> feeHistory;
 
 public:
     static int accountCount;
@@ -33,6 +35,8 @@ public:
     Client *getClient();
     virtual bool withdraw(double amount);
     virtual bool deposit(double amount);
+    bool transferFunds(BankAcc &destinationAccount, double amount);
+    vector<double> getFeeHistory() const;
 };
 
 #endif
