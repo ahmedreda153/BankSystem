@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "f:/OOP/BankSystem",
-      "program": "f:/OOP/BankSystem/build/Debug/outDebug",
+      "cwd": "f:/FCAI/Fourth Year/Grad Proj/BankSystem",
+      "program": "f:/FCAI/Fourth Year/Grad Proj/BankSystem/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [
