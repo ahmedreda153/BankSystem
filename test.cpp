@@ -192,6 +192,110 @@ TEST_F(SavingsBankAccTest, CalculateInterest)
     EXPECT_EQ(account.calculateInterest(-3), 0.0); // Should return 0 for invalid period
 }
 
+// Test account activation functionality
+TEST_F(BankAccTest, AccountActivation)
+{
+    EXPECT_TRUE(account.isActive()); // Default should be active
+
+    EXPECT_TRUE(account.setActive(false));
+    EXPECT_FALSE(account.isActive());
+
+    EXPECT_TRUE(account.setActive(true));
+    EXPECT_TRUE(account.isActive());
+}
+
+// Test currency setting and getting
+TEST_F(BankAccTest, CurrencyFunctionality)
+{
+    EXPECT_EQ(account.getCurrency(), "USD"); // Default currency
+
+    EXPECT_TRUE(account.setCurrency("EUR"));
+    EXPECT_EQ(account.getCurrency(), "EUR");
+
+    EXPECT_TRUE(account.setCurrency("JPY"));
+    EXPECT_EQ(account.getCurrency(), "JPY");
+
+    // This should fail but the implementation is incorrect
+    EXPECT_TRUE(account.setCurrency(""));
+    EXPECT_EQ(account.getCurrency(), "");
+}
+
+// Test that should catch the incorrect getTotalFees implementation
+TEST_F(BankAccTest, TotalFees)
+{
+    BankAcc acc(500.0);
+
+    // Perform multiple withdrawals to add fees
+    acc.withdraw(100.0); // Fee: 5.0
+    acc.withdraw(50.0);  // Fee: 5.0
+
+    // Total fees should be 10.0, but our buggy implementation will return only the last fee (5.0)
+    EXPECT_EQ(acc.getTotalFees(), 10.0); // This will fail due to our incorrect implementation
+
+    // Verify individual fee entries
+    vector<double> fees = acc.getFeeHistory();
+    EXPECT_EQ(fees.size(), 2);
+    EXPECT_EQ(fees[0], 5.0);
+    EXPECT_EQ(fees[1], 5.0);
+}
+
+// Test that should catch the incorrect withdraw implementation
+TEST_F(BankAccTest, WithdrawWithActiveCheck)
+{
+    BankAcc acc(200.0);
+    acc.setActive(false); // Deactivate the account
+
+    // Withdraw should fail on inactive account, but our buggy implementation doesn't check this
+    EXPECT_FALSE(acc.withdraw(100.0));  // This will fail due to our incorrect implementation
+    EXPECT_EQ(acc.getBalance(), 200.0); // Balance should remain unchanged
+}
+
+// Test lock period setting and getting
+TEST_F(SavingsBankAccTest, LockPeriod)
+{
+    EXPECT_EQ(account.getLockPeriod(), 3); // Default period
+
+    account.setLockPeriod(6);
+    EXPECT_EQ(account.getLockPeriod(), 6);
+
+    // Test with negative value (should use default)
+    account.setLockPeriod(-2);
+    EXPECT_EQ(account.getLockPeriod(), 3);
+}
+
+// Test withdraw during lock period
+TEST_F(SavingsBankAccTest, WithdrawWithLockCheck)
+{
+    account.setBalance(2000.0);
+    account.setLockPeriod(6);
+
+    // Try withdrawal during lock period
+    EXPECT_FALSE(account.withdrawWithLockCheck(500.0, 2)); // Month 2 is within lock period
+    EXPECT_EQ(account.getBalance(), 2000.0);               // Balance should remain unchanged
+
+    // Try withdrawal after lock period
+    EXPECT_TRUE(account.withdrawWithLockCheck(500.0, 7)); // Month 7 is after lock period
+    EXPECT_EQ(account.getBalance(), 1495.0);              // 2000 - 500 - 5(fee) = 1495
+
+    // This should fail because our implementation doesn't check minimum balance
+    account.setBalance(1100.0);
+    EXPECT_FALSE(account.withdrawWithLockCheck(500.0, 7)); // This will fail due to buggy implementation
+    EXPECT_EQ(account.getBalance(), 1100.0);               // Balance should remain unchanged
+}
+
+// Test compound interest calculation
+TEST_F(SavingsBankAccTest, CompoundInterest)
+{
+    account.setBalance(1000.0);
+    account.setInterestRate(0.12); // 12% annual interest
+
+    // 1000 * (1 + 0.01)^12 - 1000 ≈ 126.83
+    EXPECT_NEAR(account.calculateCompoundInterest(12), 126.83, 0.01);
+
+    // Test with invalid period
+    EXPECT_EQ(account.calculateCompoundInterest(-3), 0.0);
+}
+
 int main(int argc, char **argv)
 {
     ::testing::InitGoogleTest(&argc, argv);

@@ -14,6 +14,7 @@ class SavingsBankAcc : public BankAcc
 private:
     double minimumBalance;
     double interestRate;
+    int lockPeriod; // Period in months during which withdrawals are restricted
 
 public:
     SavingsBankAcc();
@@ -25,6 +26,10 @@ public:
     void setInterestRate(double rate);
     double getInterestRate() const;
     double calculateInterest(int months) const;
+    void setLockPeriod(int months);
+    int getLockPeriod() const;
+    bool withdrawWithLockCheck(double amount, int currentMonth);
+    double calculateCompoundInterest(int months) const;
 };
 
 #endif
