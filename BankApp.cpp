@@ -5,18 +5,25 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <cmath> // For pow function
 
 using namespace std;
 
 BankAcc::BankAcc()
 {
     balance = 0;
+    feeHistory.clear();
+    active = true;
+    currency = "USD";
 }
 
 BankAcc::BankAcc(double bal)
 {
     // balance
     balance = bal;
+    feeHistory.clear();
+    active = true;
+    currency = "USD";
 }
 
 void BankAcc::setAccountID(string ID)
@@ -69,9 +76,13 @@ Client *BankAcc::getClient()
 
 bool BankAcc::withdraw(double amount)
 {
+    // Modified with an incorrect implementation - it doesn't check account active status
     if (amount <= balance && amount > 0)
     {
-        balance -= amount;
+        // Intentional bug: doesn't check if account is active
+        double fee = 5.0;
+        balance -= (amount + fee); // 5 is the service fee
+        feeHistory.push_back(fee);
         return true;
     }
     else
@@ -96,6 +107,8 @@ bool BankAcc::deposit(double amount)
 SavingsBankAcc::SavingsBankAcc()
 {
     minimumBalance = 1000;
+    interestRate = 0.03; // Default interest rate of 3%
+    lockPeriod = 3;      // Default 3-month lock period
 }
 
 double SavingsBankAcc::setMinimumBalance(double min)
@@ -141,6 +154,62 @@ bool SavingsBankAcc::deposit(double amount)
         balance += amount;
         return true;
     }
+}
+
+void SavingsBankAcc::setLockPeriod(int months)
+{
+    if (months >= 0)
+    {
+        lockPeriod = months;
+    }
+    else
+    {
+        // Default 3-month lock period for negative values
+        lockPeriod = 3;
+    }
+}
+
+int SavingsBankAcc::getLockPeriod() const
+{
+    return lockPeriod;
+}
+
+// Intentionally incorrect implementation - doesn't respect minimum balance
+bool SavingsBankAcc::withdrawWithLockCheck(double amount, int currentMonth)
+{
+    if (currentMonth < lockPeriod)
+    {
+        // Cannot withdraw during lock period
+        return false;
+    }
+
+    // Error: This doesn't check minimum balance after withdrawal
+    if (amount > 0 && amount <= balance)
+    {
+        double fee = 5.0;
+        balance -= (amount + fee);
+        feeHistory.push_back(fee);
+        return true;
+    }
+
+    return false;
+}
+
+// Correctly implemented compound interest calculation
+double SavingsBankAcc::calculateCompoundInterest(int months) const
+{
+    if (months <= 0)
+    {
+        return 0.0;
+    }
+
+    double principal = balance;
+    double monthlyRate = interestRate / 12.0;
+
+    // Calculate compound interest: P * (1 + r/n)^(n*t) - P
+    // Where P = principal, r = annual rate, n = compounds per year, t = years
+    double finalAmount = principal * pow(1 + monthlyRate, months);
+    return finalAmount - principal;
 }
 
 Client::Client()
@@ -374,4 +443,59 @@ void BankApp::run()
             break;
         }
     } while (choice == 1 || choice == 2 || choice == 3 || choice == 4);
+}
+
+bool BankAcc::transferFunds(BankAcc &destinationAccount, double amount)
+{
+    if (amount > 0 && amount <= balance)
+    {
+        // Apply a transfer fee of 2
+        double fee = 2.0;
+        if (withdraw(amount))
+        {
+            destinationAccount.deposit(amount);
+            feeHistory.push_back(fee);
+            return true;
+        }
+    }
+    return false;
+}
+
+vector<double> BankAcc::getFeeHistory() const
+{
+    return feeHistory;
+}
+
+bool BankAcc::setActive(bool status)
+{
+    active = status;
+    return active;
+}
+
+bool BankAcc::isActive() const
+{
+    return active;
+}
+
+// This is intentionally incorrect - it doesn't validate the currency string
+bool BankAcc::setCurrency(string curr)
+{
+    currency = curr;
+    return true; // Always returns true, even with invalid currencies
+}
+
+string BankAcc::getCurrency() const
+{
+    return currency;
+}
+
+// This is intentionally incorrect - it doesn't calculate the sum correctly
+double BankAcc::getTotalFees() const
+{
+    // Intentionally buggy implementation - returns only the last fee instead of the sum
+    if (!feeHistory.empty())
+    {
+        return feeHistory.back();
+    }
+    return 0.0;
 }
