@@ -71,6 +71,7 @@ bool BankAcc::withdraw(double amount)
 {
     if (amount <= balance && amount > 0)
     {
+        cout << "Withdrawing " << amount << " from Basic Account." << endl;
         balance -= amount;
         return true;
     }
@@ -84,6 +85,7 @@ bool BankAcc::deposit(double amount)
 {
     if (amount > 0)
     {
+        cout << "Depositing " << amount << " into Basic Account." << endl;
         balance += amount;
         return true;
     }
@@ -125,6 +127,7 @@ bool SavingsBankAcc::withdraw(double amount)
 {
     if (balance - amount >= minimumBalance && amount > 0)
     {
+        cout << "Withdrawing " << amount << " from Savings Account." << endl;
         balance -= amount;
         return true;
     }
@@ -138,6 +141,7 @@ bool SavingsBankAcc::deposit(double amount)
 {
     if (amount >= 100)
     {
+        cout << "Depositing " << amount << " into Savings Account." << endl;
         balance += amount;
         return true;
     }
