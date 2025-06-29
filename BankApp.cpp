@@ -287,7 +287,7 @@ void BankApp::withdraw()
 {
     string accID;
     double amount;
-    cout << "Enter Account ID: ";
+    // cout << "Enter Account ID: ";
     cin >> accID;
     for (int i = 0; i < vecAccounts.size(); i++)
     {
@@ -315,7 +315,7 @@ void BankApp::deposit()
 {
     string accID;
     double amount;
-    cout << "Enter Account ID: ";
+    // cout << "Enter Account ID: ";
     cin >> accID;
     for (int i = 0; i < vecAccounts.size(); i++)
     {
