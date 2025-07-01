@@ -174,6 +174,36 @@ int SavingsBankAcc::getLockPeriod() const
     return lockPeriod;
 }
 
+void SavingsBankAcc::setInterestRate(double rate)
+{
+    if (rate >= 0 && rate <= 0.15) // Valid range: 0% to 15%
+    {
+        interestRate = rate;
+    }
+    else
+    {
+        interestRate = 0.03; // Revert to default 3% for invalid rates
+    }
+}
+
+double SavingsBankAcc::getInterestRate() const
+{
+    return interestRate;
+}
+
+double SavingsBankAcc::calculateInterest(int months) const
+{
+    if (months <= 0)
+    {
+        return 0.0;
+    }
+    
+    // Simple interest calculation: P * r * t
+    // Where P = principal (balance), r = annual rate, t = time in years
+    double timeInYears = months / 12.0;
+    return balance * interestRate * timeInYears;
+}
+
 // Intentionally incorrect implementation - doesn't respect minimum balance
 bool SavingsBankAcc::withdrawWithLockCheck(double amount, int currentMonth)
 {
