@@ -582,7 +582,7 @@ jobs:
           
           # Send to FastestAI (single attempt)
           response_code=$(curl -s -o response.txt -w "%{http_code}" -X POST \
-            "https://fastestai.tech/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}&build_approach=${{ matrix.approach }}" \
+            "https://fastestai.tech:5000/codebase/test-results?analysis_result_id=${{ github.event.inputs.analysis_result_id }}&build_approach=${{ matrix.approach }}" \
             -H "X-Secret-Key: $FASTEST_SECRET_KEY" \
             -H "Content-Type: application/xml" \
             -H "User-Agent: FastestAI-GitHub-Runner/1.0" \
