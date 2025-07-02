@@ -36,6 +36,7 @@ bool BankAcc::setBalance(double bal)
     if (bal >= 0)
     {
         balance = bal;
+        // bank acc
         return true;
     }
     else
