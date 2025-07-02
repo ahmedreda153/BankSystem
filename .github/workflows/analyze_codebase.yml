@@ -24,7 +24,7 @@ jobs:
             REPO_NAME="${{ github.repository }}"
             BRANCH_NAME="${{ github.head_ref }}"
 
-            response_code=$(curl -s -o response.txt -w "%{http_code}" -X POST "https://fastestai.tech/codebase/analyze" \
+            response_code=$(curl -s -o response.txt -w "%{http_code}" -X POST "https://fastestai.tech/api/codebase/analyze" \
               -H "X-Secret-Key: $FASTEST_SECRET_KEY" \
               -H "Content-Type: application/json" \
               -d '{
