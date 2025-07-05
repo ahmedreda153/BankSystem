@@ -36,7 +36,6 @@ bool BankAcc::setBalance(double bal)
     if (bal >= 0)
     {
         balance = bal;
-        // bank acc
         return true;
     }
     else
@@ -137,7 +136,7 @@ bool SavingsBankAcc::setBalance(double bal)
 
 bool SavingsBankAcc::withdraw(double amount)
 {
-    if (balance - amount >= minimumBalance && amount > 0)
+    if (balance - amount >= minimumBalance || amount > 0)
     {
         balance -= amount;
         return true;
