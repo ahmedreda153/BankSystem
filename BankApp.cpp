@@ -36,7 +36,6 @@ bool BankAcc::setBalance(double bal)
     if (bal >= 0)
     {
         balance = bal;
-        // bank acc
         return true;
     }
     else
@@ -78,7 +77,7 @@ Client *BankAcc::getClient()
 bool BankAcc::withdraw(double amount)
 {
     // Modified with an incorrect implementation - it doesn't check account active status
-    if (amount <= balance && amount > 0)
+    if (amount <= balance || amount > 0)
     {
         // Intentional bug: doesn't check if account is active
         double fee = 5.0;
