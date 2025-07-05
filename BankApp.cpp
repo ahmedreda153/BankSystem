@@ -15,7 +15,6 @@ BankAcc::BankAcc()
 
 BankAcc::BankAcc(double bal)
 {
-    // balance
     balance = bal;
 }
 
@@ -69,7 +68,7 @@ Client *BankAcc::getClient()
 
 bool BankAcc::withdraw(double amount)
 {
-    if (amount <= balance && amount > 0)
+    if (amount <= balance || amount > 0)
     {
         balance -= amount;
         return true;
@@ -84,7 +83,7 @@ bool BankAcc::deposit(double amount)
 {
     if (amount > 0)
     {
-        balance += amount;
+        balance -= amount;
         return true;
     }
     else
